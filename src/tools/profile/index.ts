@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ProfileRepository } from '../../db/repositories/profile-repository.js';
 import { extractSkills } from '../../core/tech-dictionary.js';
+import { parseResumeText } from '../../core/resume-parser.js';
 import { getLlmClient } from '../../core/llm-client.js';
 
 export function registerProfileTools(server: McpServer): void {
@@ -17,15 +18,20 @@ export function registerProfileTools(server: McpServer): void {
     },
     async (params) => {
       try {
-        // 1단계: 규칙 기반 기술스택 추출
-        const allText = [params.resume_text, params.career_description_text, params.portfolio_text]
-          .filter(Boolean).join('\n');
-        const skills = extractSkills(allText);
+        // 1단계: 규칙 기반 파싱 (LLM 없이 동작)
+        const ruleBased = parseResumeText(
+          params.resume_text,
+          params.career_description_text,
+          params.portfolio_text,
+        );
 
-        // 2단계: LLM으로 구조화 파싱
-        let parsedProfile: any = {};
+        // 2단계: LLM 보조 파싱 (실패해도 진행)
+        let llmParsed: any = {};
         try {
           const llm = getLlmClient();
+          const allText = [params.resume_text, params.career_description_text, params.portfolio_text]
+            .filter(Boolean).join('\n\n---\n\n');
+
           const response = await llm.generate({
             system: `너는 한국 개발자 이력서 파싱 전문가다. 주어진 텍스트에서 아래 정보를 JSON으로 추출해라.
 반드시 아래 JSON 형식으로만 응답해라. 다른 텍스트는 포함하지 마라.
@@ -41,54 +47,80 @@ export function registerProfileTools(server: McpServer): void {
       "name": "프로젝트명",
       "role": "역할",
       "duration": "기간",
-      "tech_stack": ["기술1", "기술2"],
-      "description": "설명",
-      "achievements": ["성과1", "성과2"],
-      "domain": "도메인",
-      "tags": ["태그1"]
+      "tech_stack": ["기술1"],
+      "description": "한 줄 설명",
+      "achievements": ["성과1"],
+      "domain": "fintech|e-commerce|healthcare|edtech|logistics|social|gaming|saas|media|other",
+      "tags": ["msa", "performance", "refactoring"]
     }
   ],
-  "domains": ["도메인1"],
-  "education": [{"school": "", "major": "", "degree": "", "year": 0}],
+  "domains": ["fintech"],
+  "education": [{"school": "", "major": "", "degree": "학사|석사|박사", "year": 2021}],
   "certifications": []
 }`,
             messages: [{ role: 'user', content: allText }],
             temperature: 0.1,
           });
 
-          // JSON 추출
           const jsonMatch = response.content.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            parsedProfile = JSON.parse(jsonMatch[0]);
+            llmParsed = JSON.parse(jsonMatch[0]);
           }
-        } catch (llmError) {
-          // LLM 실패해도 규칙 기반 결과로 진행
-          console.error('LLM 파싱 실패, 규칙 기반으로 진행:', llmError);
+        } catch {
+          // LLM 실패 → 규칙 기반 결과만 사용
         }
 
-        // 3단계: 규칙 기반 + LLM 결과 병합
+        // 3단계: 규칙 기반 + LLM 결과 병합 (규칙 기반 우선, LLM으로 보완)
+        const mergedName = ruleBased.name || llmParsed.name || null;
+        const mergedEmail = ruleBased.email || llmParsed.email || null;
+        const mergedPhone = ruleBased.phone || llmParsed.phone || null;
+        const mergedYears = ruleBased.total_experience_years || llmParsed.total_experience_years || 0;
+        const mergedCategory = ruleBased.job_category !== 'other' ? ruleBased.job_category : (llmParsed.job_category || 'other');
+
+        // 프로젝트: 규칙 기반이 있으면 사용, 없으면 LLM
+        const mergedProjects = ruleBased.projects.length > 0
+          ? ruleBased.projects
+          : (llmParsed.projects || []);
+
+        // 스킬: 규칙 기반 (기술사전 매칭) 우선
+        const mergedSkills = ruleBased.skills.length > 0
+          ? ruleBased.skills
+          : (llmParsed.skills || []).map((s: any) => typeof s === 'string' ? { name: s, level: 'intermediate' } : s);
+
+        // 도메인: 합집합
+        const domainSet = new Set([...ruleBased.domains, ...(llmParsed.domains || [])]);
+
+        // 학력/자격증: 규칙 기반 + LLM 보완
+        const mergedEducation = ruleBased.education.length > 0
+          ? ruleBased.education
+          : (llmParsed.education || []);
+        const mergedCerts = ruleBased.certifications.length > 0
+          ? ruleBased.certifications
+          : (llmParsed.certifications || []);
+
         const profile = profileRepo.save({
-          name: parsedProfile.name || null,
-          email: parsedProfile.email || null,
-          phone: parsedProfile.phone || null,
-          total_experience_years: parsedProfile.total_experience_years || 0,
-          job_category: parsedProfile.job_category || 'other',
-          skills: skills.map(s => ({ name: s, level: 'intermediate' as const })),
-          projects: parsedProfile.projects || [],
-          domains: parsedProfile.domains || [],
-          education: parsedProfile.education || [],
-          certifications: parsedProfile.certifications || [],
+          name: mergedName,
+          email: mergedEmail,
+          phone: mergedPhone,
+          total_experience_years: mergedYears,
+          job_category: mergedCategory,
+          skills: mergedSkills,
+          projects: mergedProjects,
+          domains: Array.from(domainSet),
+          education: mergedEducation,
+          certifications: mergedCerts,
           raw_resume_text: params.resume_text,
           raw_career_text: params.career_description_text || null,
           raw_portfolio_text: params.portfolio_text || null,
         });
 
         const warnings: string[] = [];
-        if (!parsedProfile.name) warnings.push('이름을 추출하지 못했습니다.');
-        if (skills.length === 0) warnings.push('기술스택을 추출하지 못했습니다. 텍스트를 확인해주세요.');
-        if (!parsedProfile.projects || parsedProfile.projects.length === 0) {
-          warnings.push('프로젝트를 추출하지 못했습니다. 경력기술서를 추가로 입력해주세요.');
-        }
+        if (!mergedName) warnings.push('이름을 추출하지 못했습니다.');
+        if (mergedSkills.length === 0) warnings.push('기술스택을 추출하지 못했습니다.');
+        if (mergedProjects.length === 0) warnings.push('프로젝트를 추출하지 못했습니다. 경력기술서를 추가로 입력해주세요.');
+        if (mergedYears === 0) warnings.push('경력 연차를 추출하지 못했습니다.');
+
+        const parsingMethod = llmParsed.name ? '규칙 기반 + LLM 보조' : '규칙 기반 (LLM 미사용)';
 
         return {
           content: [{
@@ -96,16 +128,20 @@ export function registerProfileTools(server: McpServer): void {
             text: JSON.stringify({
               message: '프로필이 저장되었습니다.',
               profile_id: profile.id,
+              parsing_method: parsingMethod,
               summary: {
                 name: profile.name,
                 experience_years: profile.total_experience_years,
-                skills_count: skills.length,
-                projects_count: profile.projects.length,
-                extracted_skills: skills,
+                job_category: profile.job_category,
+                skills_count: mergedSkills.length,
+                projects_count: mergedProjects.length,
+                domains: Array.from(domainSet),
+                extracted_skills: mergedSkills.map((s: any) => s.name || s),
               },
               warnings,
+              sections_found: Object.keys(ruleBased.sections),
               next_steps: [
-                'jobs_search로 관심 공고를 검색하세요.',
+                'jobs_search 또는 jobs_add로 관심 공고를 등록하세요.',
                 'match_score_job으로 공고와의 적합도를 확인하세요.',
                 'resume_tailor로 공고에 맞게 서류를 맞춤화하세요.',
               ],
