@@ -140,8 +140,8 @@ npm start      # 빌드된 JS 실행
 
 | Tool | 설명 |
 |------|------|
-| `jobs_search` | 키워드/조건으로 저장된 공고 검색 |
-| `jobs_get_detail` | 특정 공고 상세 조회 |
+| `jobs_search` | 키워드/조건으로 공고 검색 (원티드/사람인/잡코리아/점핏 실시간 검색) |
+| `jobs_get_detail` | 특정 공고 상세 조회 (URL 붙여넣기 지원) |
 | `jobs_add` | 공고 텍스트를 복붙하여 수동 등록 |
 
 ### 프로필
@@ -210,15 +210,36 @@ src/
 │   ├── portfolio/           # 포트폴리오 정렬
 │   ├── application/         # 지원 관리
 │   └── interview/           # 면접 준비
+├── adapters/                # 채용 사이트별 어댑터
+│   ├── base-adapter.ts      # 공통 인터페이스
+│   ├── wanted-adapter.ts    # 원티드 API
+│   ├── saramin-adapter.ts   # 사람인 Open API
+│   ├── jobkorea-adapter.ts  # 잡코리아 웹 파싱
+│   └── jumpit-adapter.ts    # 점핏 API
 ├── core/                    # 핵심 라이브러리
 │   ├── llm-client.ts        # LLM 추상화 (Anthropic/OpenAI/Ollama)
 │   ├── tech-dictionary.ts   # 기술 사전 (80+ 항목, 한국어 동의어)
+│   ├── resume-parser.ts     # 이력서 규칙 기반 파싱
+│   ├── job-normalizer.ts    # 공고 텍스트 정규화
+│   ├── platform-templates.ts # 플랫폼별 양식 템플릿 (6종)
 │   └── utils.ts
 ├── db/                      # SQLite DB
 │   ├── connection.ts
 │   └── repositories/
 └── types/                   # 타입 정의
 ```
+
+---
+
+## 채용 사이트 지원 현황
+
+| 사이트 | 공고 검색 | 양식 변환 | API 키 필요 |
+|--------|----------|----------|------------|
+| **원티드** | ✅ 실시간 | ✅ | 불필요 |
+| **사람인** | ✅ 실시간 | ✅ | `SARAMIN_API_KEY` 필요 |
+| **잡코리아** | ✅ 웹 파싱 | ✅ | 불필요 |
+| **점핏** | ✅ 실시간 | ✅ | 불필요 |
+| **로켓펀치** | 🔜 예정 | ✅ | - |
 
 ---
 

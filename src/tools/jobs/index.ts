@@ -3,11 +3,22 @@ import { z } from 'zod';
 import { JobRepository } from '../../db/repositories/job-repository.js';
 import { normalizeJobText } from '../../core/job-normalizer.js';
 import { WantedAdapter } from '../../adapters/wanted-adapter.js';
+import { SaraminAdapter } from '../../adapters/saramin-adapter.js';
+import { JobkoreaAdapter } from '../../adapters/jobkorea-adapter.js';
+import { JumpitAdapter } from '../../adapters/jumpit-adapter.js';
+import type { SourceAdapter } from '../../adapters/base-adapter.js';
 import type { JobPosting, JobSource } from '../../types/job.js';
 
 export function registerJobTools(server: McpServer): void {
   const jobRepo = new JobRepository();
-  const wantedAdapter = new WantedAdapter();
+
+  // 어댑터 레지스트리
+  const adapters: Record<string, SourceAdapter> = {
+    wanted: new WantedAdapter(),
+    saramin: new SaraminAdapter(),
+    jobkorea: new JobkoreaAdapter(),
+    jumpit: new JumpitAdapter(),
+  };
 
   server.tool(
     'jobs_search',
@@ -45,42 +56,57 @@ export function registerJobTools(server: McpServer): void {
           if (localJobs.length > 0) sourcesSearched.push('wanted');
         }
 
-        // 2. 온라인 검색 (원티드)
-        if (params.search_mode !== 'local' && params.sources?.includes('wanted')) {
-          try {
-            const onlineJobs = await wantedAdapter.search({
-              keywords: params.keywords,
-              location: params.location,
-              experience_min: params.experience_min,
-              experience_max: params.experience_max,
-              job_category: params.job_category,
-              limit: params.limit,
-            });
+        // 2. 온라인 검색 (지원되는 모든 소스)
+        if (params.search_mode !== 'local') {
+          const searchParams = {
+            keywords: params.keywords,
+            location: params.location,
+            experience_min: params.experience_min,
+            experience_max: params.experience_max,
+            job_category: params.job_category,
+            limit: params.limit,
+          };
 
-            // 중복 제거 (source_id 기준)
-            const existingIds = new Set(allJobs.map(j => j.source_id));
-            for (const job of onlineJobs) {
-              if (!existingIds.has(job.source_id)) {
-                // DB에 캐싱
-                const existing = jobRepo.findBySourceId('wanted', job.source_id);
-                if (!existing) {
-                  jobRepo.save(job);
-                }
-                allJobs.push(job);
-                existingIds.add(job.source_id);
-              }
+          const existingIds = new Set(allJobs.map(j => `${j.source}:${j.source_id}`));
+
+          // 요청된 소스별로 병렬 검색
+          const requestedSources = (params.sources || ['wanted']) as string[];
+          const searchPromises = requestedSources.map(async (source) => {
+            const adapter = adapters[source];
+            if (!adapter) {
+              warnings.push(`지원하지 않는 소스: ${source}`);
+              return;
+            }
+            if (!adapter.isAvailable()) {
+              warnings.push(`${source}: API 키가 설정되지 않았습니다. 환경변수를 확인하세요.`);
+              return;
             }
 
-            if (!sourcesSearched.includes('wanted')) sourcesSearched.push('wanted');
-          } catch (error) {
-            warnings.push(`원티드 온라인 검색 실패: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        }
+            try {
+              const onlineJobs = await adapter.search(searchParams);
 
-        // 미지원 소스 안내
-        const unsupported = (params.sources || []).filter(s => s !== 'wanted');
-        if (unsupported.length > 0) {
-          warnings.push(`아직 지원하지 않는 소스: ${unsupported.join(', ')} (향후 추가 예정)`);
+              for (const job of onlineJobs) {
+                const key = `${job.source}:${job.source_id}`;
+                if (!existingIds.has(key)) {
+                  // DB에 캐싱
+                  const existing = jobRepo.findBySourceId(job.source as JobSource, job.source_id);
+                  if (!existing) {
+                    jobRepo.save(job);
+                  }
+                  allJobs.push(job);
+                  existingIds.add(key);
+                }
+              }
+
+              if (!sourcesSearched.includes(source as JobSource)) {
+                sourcesSearched.push(source as JobSource);
+              }
+            } catch (error) {
+              warnings.push(`${source} 검색 실패: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          });
+
+          await Promise.all(searchPromises);
         }
 
         const queryTime = Date.now() - startTime;
@@ -124,18 +150,27 @@ export function registerJobTools(server: McpServer): void {
     },
     async (params) => {
       try {
-        // URL로 조회 시
+        // URL로 조회 시 — 소스별 URL 패턴 매칭
         if (params.job_id.startsWith('http')) {
-          const wantedMatch = params.job_id.match(/wanted\.co\.kr\/wd\/(\d+)/);
-          if (wantedMatch) {
-            const detail = await wantedAdapter.fetchDetail(wantedMatch[1]);
-            if (detail) {
-              // DB에 저장
-              const existing = jobRepo.findBySourceId('wanted', detail.source_id);
-              if (!existing) {
-                jobRepo.save(detail);
+          const urlPatterns: { pattern: RegExp; source: string; extractId: (m: RegExpMatchArray) => string }[] = [
+            { pattern: /wanted\.co\.kr\/wd\/(\d+)/, source: 'wanted', extractId: m => m[1] },
+            { pattern: /saramin\.co\.kr.*rec_idx=(\d+)/, source: 'saramin', extractId: m => m[1] },
+            { pattern: /jobkorea\.co\.kr.*\/(\d+)/, source: 'jobkorea', extractId: m => m[1] },
+            { pattern: /jumpit\.co\.kr\/position\/(\d+)/, source: 'jumpit', extractId: m => m[1] },
+          ];
+
+          for (const { pattern, source, extractId } of urlPatterns) {
+            const urlMatch = params.job_id.match(pattern);
+            if (urlMatch) {
+              const adapter = adapters[source];
+              if (adapter?.isAvailable()) {
+                const detail = await adapter.fetchDetail(extractId(urlMatch));
+                if (detail) {
+                  const existing = jobRepo.findBySourceId(source as JobSource, detail.source_id);
+                  if (!existing) jobRepo.save(detail);
+                  return { content: [{ type: 'text' as const, text: JSON.stringify(detail, null, 2) }] };
+                }
               }
-              return { content: [{ type: 'text' as const, text: JSON.stringify(detail, null, 2) }] };
             }
           }
           return { content: [{ type: 'text' as const, text: '해당 URL의 공고를 가져올 수 없습니다.' }], isError: true };
@@ -147,11 +182,14 @@ export function registerJobTools(server: McpServer): void {
           return { content: [{ type: 'text' as const, text: `공고를 찾을 수 없습니다: ${params.job_id}` }], isError: true };
         }
 
-        // 상세 정보가 부족하면 원티드에서 다시 가져오기
-        if (job.source === 'wanted' && job.raw_text === '' && job.source_id) {
-          const detail = await wantedAdapter.fetchDetail(job.source_id);
-          if (detail) {
-            return { content: [{ type: 'text' as const, text: JSON.stringify(detail, null, 2) }] };
+        // 상세 정보가 부족하면 원본 사이트에서 다시 가져오기
+        if (job.raw_text === '' && job.source_id) {
+          const adapter = adapters[job.source];
+          if (adapter?.isAvailable()) {
+            const detail = await adapter.fetchDetail(job.source_id);
+            if (detail) {
+              return { content: [{ type: 'text' as const, text: JSON.stringify(detail, null, 2) }] };
+            }
           }
         }
 
