@@ -1,5 +1,7 @@
 # 프로젝트 회고 — 한국 취업시장 특화 MCP 서버
 
+> **GitHub**: [https://github.com/PracLee/job_hunting_mcp](https://github.com/PracLee/job_hunting_mcp)
+
 ## 1. 왜 이걸 만들게 되었는가
 
 ### 문제의 시작: "같은 서류를 6번 쓰는 고통"
