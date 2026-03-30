@@ -104,7 +104,7 @@ ${profile.projects.map(p => `- ${p.name} (${p.role}, ${p.duration})
     '마스터 프로필을 특정 채용사이트 양식에 맞게 변환합니다. LLM 없이도 동작하며, 복사해서 바로 붙여넣을 수 있는 텍스트를 생성합니다.',
     {
       profile_id: z.string().optional().describe('프로필 ID'),
-      target_platform: z.enum(['wanted', 'saramin', 'jobkorea', 'jumpit', 'rocketpunch', 'general']).describe('출력 대상 플랫폼'),
+      target_platform: z.enum(['wanted', 'saramin', 'jobkorea', 'jumpit', 'groupby', 'general']).describe('출력 대상 플랫폼'),
       job_id: z.string().optional().describe('특정 공고에 맞춤화할 경우'),
       enhance_with_llm: z.boolean().optional().default(false).describe('LLM으로 문장을 보강할지 여부'),
     },

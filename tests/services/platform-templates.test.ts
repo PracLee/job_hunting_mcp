@@ -55,7 +55,7 @@ describe('platform-templates', () => {
     expect(all.length).toBe(6);
   });
 
-  describe.each(['wanted', 'saramin', 'jobkorea', 'jumpit', 'rocketpunch', 'general'] as const)('%s 템플릿', (platform) => {
+  describe.each(['wanted', 'saramin', 'jobkorea', 'jumpit', 'groupby', 'general'] as const)('%s 템플릿', (platform) => {
     it('프로필을 변환할 수 있다', () => {
       const template = getTemplate(platform);
       const output = template.formatProfile(MOCK_PROFILE);

@@ -5,7 +5,7 @@
 
 import type { UserProfile, Project, Skill, Education } from '../types/index.js';
 
-export type PlatformType = 'wanted' | 'saramin' | 'jobkorea' | 'jumpit' | 'rocketpunch' | 'general';
+export type PlatformType = 'wanted' | 'saramin' | 'jobkorea' | 'jumpit' | 'groupby' | 'general';
 
 export interface PlatformTemplate {
   platform: PlatformType;
@@ -247,39 +247,51 @@ class JumpitTemplate implements PlatformTemplate {
   }
 }
 
-// --- 로켓펀치 ---
+// --- 그룹바이 ---
 
-class RocketpunchTemplate implements PlatformTemplate {
-  platform = 'rocketpunch' as const;
-  name = '로켓펀치';
-  description = '링크드인 스타일 프로필 — 요약 + 경험 타임라인 + 기술 태그';
+class GroupbyTemplate implements PlatformTemplate {
+  platform = 'groupby' as const;
+  name = '그룹바이';
+  description = '스타트업 전문 채용 플랫폼 — 간결한 소개 + 기술 태그 + 성과 중심 경력';
 
   formatProfile(profile: UserProfile): PlatformOutput {
     const summary = `${formatCategory(profile.job_category)} 개발자 | ${profile.total_experience_years}년 경력 | ${profile.skills.slice(0, 5).map(s => s.name).join(', ')}`;
 
-    const timeline = profile.projects.map(p =>
-      `${p.duration}\n${p.name} — ${p.role}\n${p.achievements.slice(0, 2).join(' / ') || p.description}`
-    ).join('\n\n');
+    const intro = `${profile.total_experience_years}년차 ${formatCategory(profile.job_category)} 개발자입니다. ${profile.domains.length > 0 ? profile.domains.join(', ') + ' 도메인에서 일했습니다.' : ''}`.trim();
+
+    const projects = profile.projects.map(p => {
+      const topAchievements = p.achievements.slice(0, 2).map(a => `• ${a}`).join('\n');
+      return [
+        `${p.name} (${p.duration})`,
+        `${p.role} | ${p.tech_stack.join(', ')}`,
+        topAchievements || `• ${p.description}`,
+      ].join('\n');
+    }).join('\n\n');
 
     const sections: Record<string, string> = {
-      '요약': summary,
-      '경험': timeline,
-      '기술': profile.skills.map(s => s.name).join(', '),
-      '학력': profile.education.map(e => `${e.school} ${e.major}`).join(', '),
+      '한 줄 요약': summary,
+      '소개': intro,
+      '기술 스택': profile.skills.map(s => s.name).join(', '),
+      '경력/프로젝트': projects,
     };
+
+    if (profile.education.length > 0) {
+      sections['학력'] = profile.education.map(e => `${e.school} ${e.major} ${e.degree}`).join(', ');
+    }
 
     const copyText = Object.entries(sections).map(([key, val]) =>
       `[${key}]\n${val}`
     ).join('\n\n');
 
     return {
-      platform: 'rocketpunch',
+      platform: 'groupby',
       sections,
       copy_ready_text: copyText,
       platform_tips: [
-        '로켓펀치는 링크드인 스타일 — 요약 한 줄이 프로필의 첫인상',
-        '경험은 최신순 타임라인으로 표시됨',
-        '스타트업/중소기업 공고가 많으므로 폭넓은 기술 경험을 강조',
+        '그룹바이는 스타트업 전문 — 빠른 성장/적응력/다양한 역할 경험을 강조하세요',
+        '기술 태그를 상세히 입력하면 AI 매칭 정확도가 올라갑니다',
+        '소규모 팀에서의 임팩트 있는 성과를 부각하세요',
+        '스타트업 관심도를 보여주는 사이드 프로젝트/오픈소스 경험이 유리',
       ],
     };
   }
@@ -374,7 +386,7 @@ register(new WantedTemplate());
 register(new SaraminTemplate());
 register(new JobkoreaTemplate());
 register(new JumpitTemplate());
-register(new RocketpunchTemplate());
+register(new GroupbyTemplate());
 register(new GeneralTemplate());
 
 export function getTemplate(platform: PlatformType): PlatformTemplate {

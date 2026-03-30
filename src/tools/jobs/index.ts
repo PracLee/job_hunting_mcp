@@ -6,6 +6,7 @@ import { WantedAdapter } from '../../adapters/wanted-adapter.js';
 import { SaraminAdapter } from '../../adapters/saramin-adapter.js';
 import { JobkoreaAdapter } from '../../adapters/jobkorea-adapter.js';
 import { JumpitAdapter } from '../../adapters/jumpit-adapter.js';
+import { GroupbyAdapter } from '../../adapters/groupby-adapter.js';
 import type { SourceAdapter } from '../../adapters/base-adapter.js';
 import type { JobPosting, JobSource } from '../../types/job.js';
 
@@ -18,6 +19,7 @@ export function registerJobTools(server: McpServer): void {
     saramin: new SaraminAdapter(),
     jobkorea: new JobkoreaAdapter(),
     jumpit: new JumpitAdapter(),
+    groupby: new GroupbyAdapter(),
   };
 
   server.tool(
@@ -29,7 +31,7 @@ export function registerJobTools(server: McpServer): void {
       experience_min: z.number().optional().describe('최소 경력 연차'),
       experience_max: z.number().optional().describe('최대 경력 연차'),
       job_category: z.enum(['backend', 'frontend', 'fullstack', 'mobile', 'data', 'devops', 'ai_ml', 'security', 'other']).optional(),
-      sources: z.array(z.enum(['wanted', 'saramin', 'jobkorea', 'jumpit', 'rocketpunch'])).optional().default(['wanted']),
+      sources: z.array(z.enum(['wanted', 'saramin', 'jobkorea', 'jumpit', 'groupby'])).optional().default(['wanted']),
       limit: z.number().optional().default(20),
       search_mode: z.enum(['online', 'local', 'both']).optional().default('both')
         .describe('online: 원티드 실시간 검색, local: 저장된 공고만, both: 둘 다'),
@@ -157,6 +159,7 @@ export function registerJobTools(server: McpServer): void {
             { pattern: /saramin\.co\.kr.*rec_idx=(\d+)/, source: 'saramin', extractId: m => m[1] },
             { pattern: /jobkorea\.co\.kr.*\/(\d+)/, source: 'jobkorea', extractId: m => m[1] },
             { pattern: /jumpit\.co\.kr\/position\/(\d+)/, source: 'jumpit', extractId: m => m[1] },
+            { pattern: /groupby\.kr\/positions\/(\d+)/, source: 'groupby', extractId: m => m[1] },
           ];
 
           for (const { pattern, source, extractId } of urlPatterns) {
@@ -211,7 +214,7 @@ export function registerJobTools(server: McpServer): void {
       job_title: z.string().describe('채용 포지션명'),
       url: z.string().optional().describe('공고 URL'),
       raw_text: z.string().describe('공고 전체 텍스트 (복사 붙여넣기)'),
-      source: z.enum(['wanted', 'saramin', 'jobkorea', 'jumpit', 'rocketpunch']).optional().default('wanted'),
+      source: z.enum(['wanted', 'saramin', 'jobkorea', 'jumpit', 'groupby']).optional().default('wanted'),
     },
     async (params) => {
       try {
