@@ -16,7 +16,7 @@
 
 | 기능 | 설명 |
 |------|------|
-| **채용공고 관리** | 5개 사이트에서 공고 검색 + 정규화 저장 |
+| **채용공고 관리** | 6개 사이트에서 공고 검색 + 정규화 저장 |
 | **프로필 파싱** | 이력서/경력기술서를 구조화된 마스터 프로필로 변환 |
 | **적합도 분석** | 공고-프로필을 5가지 차원으로 매칭 분석 |
 | **사이트별 양식 변환** | 원티드/사람인/잡코리아/점핏/그룹바이 양식 복붙 텍스트 |
@@ -204,7 +204,7 @@ LOCAL_LLM_API_KEY=not-needed
 ```
 # 방법 1: 온라인 검색
 "서울, Java 백엔드, 3~5년차 공고 찾아줘"
-→ jobs_search(keywords: ["Java", "백엔드"], location: "서울", sources: ["wanted", "jumpit", "groupby"])
+→ jobs_search(keywords: ["Java", "백엔드"], location: "서울", sources: ["wanted", "jumpit", "groupby", "remember"])
 
 # 방법 2: URL로 상세 조회
 "이 공고 상세 보여줘: https://www.wanted.co.kr/wd/12345"
@@ -299,7 +299,7 @@ LOCAL_LLM_API_KEY=not-needed
 
 | Tool | 설명 |
 |------|------|
-| `jobs_search` | 키워드/조건으로 공고 검색 (원티드/사람인/잡코리아/점핏/그룹바이) |
+| `jobs_search` | 키워드/조건으로 공고 검색 (원티드/사람인/잡코리아/점핏/그룹바이/리멤버) |
 | `jobs_get_detail` | 특정 공고 상세 조회 (URL 붙여넣기 지원) |
 | `jobs_add` | 공고 텍스트를 복붙하여 수동 등록 |
 
@@ -352,6 +352,7 @@ LOCAL_LLM_API_KEY=not-needed
 | **잡코리아** | ✅ | ✅ | 불필요 | 웹 파싱 |
 | **점핏** | ✅ | ✅ | 불필요 | 웹 API |
 | **그룹바이** | ✅ | ✅ | 불필요 | 스타트업 전문, Next.js SSR 파싱 |
+| **리멤버** | ✅ | - | 불필요 | 경력직 전문, 내부 API 파싱 |
 
 ### 검토 후 제외한 플랫폼
 
@@ -398,7 +399,8 @@ src/
 │   ├── saramin-adapter.ts    # 사람인
 │   ├── jobkorea-adapter.ts   # 잡코리아
 │   ├── jumpit-adapter.ts     # 점핏
-│   └── groupby-adapter.ts    # 그룹바이 (스타트업)
+│   ├── groupby-adapter.ts    # 그룹바이 (스타트업)
+│   └── remember-adapter.ts   # 리멤버 (경력직)
 ├── core/                     # 핵심 라이브러리
 │   ├── llm-client.ts         # LLM 추상화 (Ollama / OpenAI 호환 로컬)
 │   ├── tech-dictionary.ts    # 기술 사전 (80+ 항목, 한국어 동의어)

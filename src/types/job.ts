@@ -21,7 +21,7 @@ export interface JobPosting {
   fetched_at: string;
 }
 
-export type JobSource = 'wanted' | 'saramin' | 'jobkorea' | 'jumpit' | 'groupby';
+export type JobSource = 'wanted' | 'saramin' | 'jobkorea' | 'jumpit' | 'groupby' | 'remember';
 
 export type JobCategory =
   | 'backend'
