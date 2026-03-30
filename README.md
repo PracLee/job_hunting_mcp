@@ -60,20 +60,36 @@ npm run build
      여기서 대화하면                                여기서 실행됨
 ```
 
-#### Claude Desktop (추천)
+아래에서 사용하는 클라이언트를 골라 설정하세요.
+모든 클라이언트에서 동일한 JSON 포맷(`mcpServers`)을 사용합니다.
 
-`~/Library/Application Support/Claude/claude_desktop_config.json`:
+> **공통 설정 JSON** (클라이언트마다 파일 위치만 다릅니다):
+> ```json
+> {
+>   "mcpServers": {
+>     "job-hunting": {
+>       "command": "node",
+>       "args": ["/절대경로/job_hunting_mcp/dist/index.js"]
+>     }
+>   }
+> }
+> ```
 
-```json
-{
-  "mcpServers": {
-    "job-hunting": {
-      "command": "node",
-      "args": ["/절대경로/job_hunting_mcp/dist/index.js"]
-    }
-  }
-}
-```
+#### Claude Desktop
+
+| OS | 설정 파일 경로 |
+|----|---------------|
+| **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` |
+
+#### ChatGPT Desktop
+
+| OS | 설정 파일 경로 |
+|----|---------------|
+| **macOS** | `~/Library/Application Support/com.openai.chat/mcp.json` |
+| **Windows** | `%APPDATA%\com.openai.chat\mcp.json` |
+
+> 또는 앱 내에서 Settings → MCP Servers → Add Server로 GUI 추가도 가능합니다.
 
 #### Claude Code (CLI)
 
@@ -81,28 +97,20 @@ npm run build
 claude mcp add job-hunting node /절대경로/job_hunting_mcp/dist/index.js
 ```
 
-#### ChatGPT Desktop
-
-설정 → MCP Servers → Add Server → `node /절대경로/job_hunting_mcp/dist/index.js` 입력
-
 #### Gemini CLI
 
-```bash
-# .gemini/settings.json 에 추가
-{
-  "mcpServers": {
-    "job-hunting": {
-      "command": "node",
-      "args": ["/절대경로/job_hunting_mcp/dist/index.js"]
-    }
-  }
-}
-```
+| OS | 설정 파일 경로 |
+|----|---------------|
+| **macOS / Linux** | `~/.gemini/settings.json` |
+| **Windows** | `%USERPROFILE%\.gemini\settings.json` |
 
 #### 기타 MCP 호환 클라이언트
 
 MCP 표준을 지원하는 앱이면 어디서든 사용 가능합니다.
 `command: "node"`, `args: ["/절대경로/dist/index.js"]`로 등록하면 됩니다.
+
+> **Windows 사용자 참고**: 경로 구분자를 `\\`로 사용하세요.
+> 예: `"args": ["C:\\Users\\이름\\job_hunting_mcp\\dist\\index.js"]`
 
 ### 3. 환경 설정 (선택사항)
 
