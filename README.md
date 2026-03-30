@@ -7,27 +7,24 @@
 > **핵심 가치**: 이력서/경력기술서/자기소개서를 한 번 입력하면, 공고별·사이트별로 맞춤 변환합니다.
 > 같은 서류를 사이트마다 다시 쓰는 고통을 없앱니다.
 
-> **로컬 전용**: 외부 API 없이, **Ollama 등 로컬 LLM**만 사용합니다.
-> 개인 이력 데이터가 외부로 전송되지 않습니다.
+> **사용법**: Claude Desktop, ChatGPT Desktop, Gemini CLI 등 **MCP 클라이언트에 연결**하면 바로 사용할 수 있습니다.
+> 별도 LLM 설치 없이 MCP 클라이언트의 AI가 서류 작성까지 처리합니다.
 
 ---
 
 ## 이 MCP가 하는 일
 
-| 기능 | 설명 | LLM 필요 여부 |
-|------|------|:---:|
-| **채용공고 관리** | 5개 사이트에서 공고 검색 + 정규화 저장 | ❌ |
-| **프로필 파싱** | 이력서/경력기술서를 구조화된 마스터 프로필로 변환 | ❌ |
-| **적합도 분석** | 공고-프로필을 5가지 차원으로 매칭 분석 | ❌ |
-| **사이트별 양식 변환** | 원티드/사람인/잡코리아/점핏/그룹바이 양식 복붙 텍스트 | ❌ |
-| **경력기술서 맞춤화** | 공고 요구사항에 맞게 bullet point 재작성 | ✅ |
-| **자기소개서 작성** | 문항 의도 분석 → 소재 추천 → 초안 생성 | ✅ |
-| **포트폴리오 정렬** | 공고 기준으로 프로젝트 관련도 순 재배치 | ✅ |
-| **지원 관리** | 지원 상태 추적 (저장 → 지원 → 합격/불합격) | ❌ |
-| **면접 준비** | 공고+경력 기반 예상 질문 및 답변 포인트 | ✅ |
-
-> **LLM 없이도 핵심 기능(공고 검색, 프로필 파싱, 매칭, 양식 변환, 지원 관리)은 완전히 동작합니다.**
-> LLM은 서류 생성/보강 등 고부가가치 작업에만 사용됩니다.
+| 기능 | 설명 |
+|------|------|
+| **채용공고 관리** | 5개 사이트에서 공고 검색 + 정규화 저장 |
+| **프로필 파싱** | 이력서/경력기술서를 구조화된 마스터 프로필로 변환 |
+| **적합도 분석** | 공고-프로필을 5가지 차원으로 매칭 분석 |
+| **사이트별 양식 변환** | 원티드/사람인/잡코리아/점핏/그룹바이 양식 복붙 텍스트 |
+| **경력기술서 맞춤화** | 공고 요구사항에 맞게 bullet point 재작성 |
+| **자기소개서 작성** | 문항 의도 분석 → 소재 추천 → 초안 생성 |
+| **포트폴리오 정렬** | 공고 기준으로 프로젝트 관련도 순 재배치 |
+| **지원 관리** | 지원 상태 추적 (저장 → 지원 → 합격/불합격) |
+| **면접 준비** | 공고+경력 기반 예상 질문 및 답변 포인트 |
 
 ---
 
@@ -42,12 +39,28 @@ npm install
 npm run build
 ```
 
-### 2. MCP 클라이언트 연결
+### 2. MCP 클라이언트에 연결하면 끝!
 
-이 MCP 서버는 **MCP를 지원하는 모든 클라이언트**에서 사용할 수 있습니다.
-클라이언트는 사용자가 대화하는 UI이고, 우리 MCP 서버의 Tool을 호출하는 역할입니다.
+이 MCP 서버는 **MCP를 지원하는 AI 클라이언트에 연결하면 바로 사용**할 수 있습니다.
+별도 LLM 설치가 필요 없습니다 — **클라이언트의 AI가 서류 작성까지 모두 처리**합니다.
 
-#### Claude Desktop
+```
+┌─────────────────────────┐      Tool 호출      ┌──────────────────────┐
+│  MCP 클라이언트 (AI)     │ ─────────────────→ │  이 MCP 서버          │
+│                         │                     │                      │
+│  • Claude Desktop       │                     │  • 공고 검색/정규화    │
+│  • ChatGPT Desktop      │  ←───────────────── │  • 프로필 파싱        │
+│  • Claude Code (CLI)    │      결과 반환       │  • 매칭 분석          │
+│  • Gemini CLI           │                     │  • 양식 변환          │
+│  • 기타 MCP 호환 앱      │                     │  • 지원 관리          │
+│                         │                     │                      │
+│  서류 작성은 클라이언트   │                     │  데이터 처리 + 로직    │
+│  AI가 직접 처리          │                     │                      │
+└─────────────────────────┘                     └──────────────────────┘
+     여기서 대화하면                                여기서 실행됨
+```
+
+#### Claude Desktop (추천)
 
 `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -70,10 +83,7 @@ claude mcp add job-hunting node /절대경로/job_hunting_mcp/dist/index.js
 
 #### ChatGPT Desktop
 
-ChatGPT Desktop에서 MCP 서버를 추가합니다:
-
-1. 설정 → MCP Servers → Add Server
-2. `node /절대경로/job_hunting_mcp/dist/index.js` 입력
+설정 → MCP Servers → Add Server → `node /절대경로/job_hunting_mcp/dist/index.js` 입력
 
 #### Gemini CLI
 
@@ -91,10 +101,27 @@ ChatGPT Desktop에서 MCP 서버를 추가합니다:
 
 #### 기타 MCP 호환 클라이언트
 
-MCP 표준을 지원하는 클라이언트라면 어디서든 사용 가능합니다.
+MCP 표준을 지원하는 앱이면 어디서든 사용 가능합니다.
 `command: "node"`, `args: ["/절대경로/dist/index.js"]`로 등록하면 됩니다.
 
-#### 직접 실행 (개발/테스트)
+### 3. 환경 설정 (선택사항)
+
+```bash
+cp .env.example .env
+```
+
+대부분의 경우 `.env` 설정 없이 바로 사용할 수 있습니다.
+아래는 필요한 경우에만 설정합니다:
+
+```env
+# 사람인 공고 검색을 사용하려면 (선택)
+SARAMIN_API_KEY=your-saramin-api-key
+
+# DB 저장 위치 변경 (기본: ./data/job_hunting.db)
+DB_PATH=./data/job_hunting.db
+```
+
+### 4. 개발/테스트
 
 ```bash
 npm run dev    # tsx로 직접 실행 (개발)
@@ -102,53 +129,32 @@ npm start      # 빌드된 JS 실행
 npm test       # 테스트 (63건)
 ```
 
-### 3. 로컬 LLM 설정 (선택사항)
+---
 
-> **LLM 없이도 핵심 기능(공고 검색, 프로필 파싱, 매칭, 양식 변환, 지원 관리)은 완전히 동작합니다.**
-> 서류 생성/보강(경력기술서 맞춤화, 자소서 초안, 면접 준비)을 사용하려면 로컬 LLM이 필요합니다.
+## (고급) 로컬 LLM 연동
 
-```
-┌─────────────────────┐     Tool 호출     ┌──────────────────┐     서류 생성 시     ┌─────────────────┐
-│  MCP 클라이언트      │ ──────────────→  │  이 MCP 서버      │ ──────────────→   │  로컬 LLM       │
-│  (Claude Desktop,   │                   │  (job-hunting)    │                    │  (Ollama 등)    │
-│   ChatGPT Desktop,  │  ←──────────────  │                  │  ←──────────────   │                 │
-│   Gemini CLI 등)    │     결과 반환     │                  │     생성된 텍스트   │                 │
-└─────────────────────┘                   └──────────────────┘                    └─────────────────┘
-       사용자 UI                              우리 서버                          서류 작성용 LLM 엔진
-```
+> **대부분의 사용자는 이 섹션이 필요 없습니다.**
+> Claude Desktop 등 MCP 클라이언트의 AI가 서류 작성을 처리하기 때문입니다.
+>
+> 아래는 **완전 오프라인 환경**에서 사용하거나,
+> MCP 서버 내부에서 자체적으로 LLM을 호출하고 싶을 때를 위한 고급 설정입니다.
 
-- **MCP 클라이언트**: 사용자가 대화하는 UI. 우리 Tool을 호출하는 쪽
-- **이 MCP 서버**: 공고 검색, 매칭, 양식 변환 등 실제 로직 수행
-- **로컬 LLM**: MCP 서버 내부에서 서류 생성이 필요할 때만 호출되는 LLM 엔진
-
-#### 방법 A: Ollama (추천)
+#### Ollama
 
 ```bash
-# Ollama 설치 (https://ollama.com)
-brew install ollama           # macOS
-# curl -fsSL https://ollama.com/install.sh | sh  # Linux
-
-# 모델 다운로드
-ollama pull llama3            # 범용
-ollama pull qwen2.5           # 한국어 우수 (추천)
-ollama pull gemma2            # 한국어 양호
-
-# Ollama 서버 시작
-ollama serve
-```
-
-환경 설정 (`.env`):
-```bash
-cp .env.example .env
+brew install ollama              # macOS
+ollama pull qwen2.5              # 한국어 우수 (추천, 최소 16GB RAM)
+ollama serve                     # 서버 시작
 ```
 
 ```env
+# .env
 LLM_PROVIDER=ollama
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5
 ```
 
-#### 방법 B: LM Studio / vLLM 등 OpenAI 호환 로컬 서버
+#### LM Studio / vLLM 등 OpenAI 호환 로컬 서버
 
 ```env
 LLM_PROVIDER=openai-compatible
@@ -156,6 +162,15 @@ LOCAL_LLM_BASE_URL=http://localhost:1234/v1
 LOCAL_LLM_MODEL=local-model
 LOCAL_LLM_API_KEY=not-needed
 ```
+
+#### 로컬 LLM 최소 사양
+
+| 모델 | RAM | 비고 |
+|------|-----|------|
+| qwen2.5 7B (Q4) | 16GB+ | 한국어 추천 |
+| llama3 8B (Q4) | 16GB+ | 범용 |
+| gemma2 9B (Q4) | 16GB+ | 빠듯함, 다른 앱 닫아야 |
+| 70B 모델 | 64GB+ | 고사양 필요 |
 
 ---
 
@@ -295,13 +310,13 @@ LOCAL_LLM_API_KEY=not-needed
 
 ### 서류 (5개)
 
-| Tool | 설명 | LLM |
-|------|------|:---:|
-| `resume_tailor` | 공고 맞춤 경력기술서 | ✅ |
-| `resume_export` | 플랫폼별 양식 변환 (5개 사이트 + 범용) | 선택 |
-| `coverletter_brainstorm` | 자소서 소재 추천 | ✅ |
-| `coverletter_generate` | 자소서 초안 생성 | ✅ |
-| `portfolio_reorder` | 공고 기준 프로젝트 재배치 | ✅ |
+| Tool | 설명 |
+|------|------|
+| `resume_tailor` | 공고 맞춤 경력기술서 (클라이언트 AI가 처리) |
+| `resume_export` | 플랫폼별 양식 변환 (5개 사이트 + 범용) |
+| `coverletter_brainstorm` | 자소서 소재 추천 (클라이언트 AI가 처리) |
+| `coverletter_generate` | 자소서 초안 생성 (클라이언트 AI가 처리) |
+| `portfolio_reorder` | 공고 기준 프로젝트 재배치 (클라이언트 AI가 처리) |
 
 ### 지원 관리 (3개)
 
@@ -313,9 +328,9 @@ LOCAL_LLM_API_KEY=not-needed
 
 ### 면접 (1개)
 
-| Tool | 설명 | LLM |
-|------|------|:---:|
-| `interview_prepare` | 예상 질문/답변 포인트 | ✅ |
+| Tool | 설명 |
+|------|------|
+| `interview_prepare` | 예상 질문/답변 포인트 (클라이언트 AI가 처리) |
 
 ---
 
@@ -347,7 +362,7 @@ LOCAL_LLM_API_KEY=not-needed
 | Language | TypeScript (strict) |
 | MCP SDK | `@modelcontextprotocol/sdk` |
 | DB | SQLite (better-sqlite3) — 로컬 파일, 별도 설치 불필요 |
-| LLM | **Ollama (기본)** / OpenAI 호환 로컬 서버 |
+| LLM | MCP 클라이언트 AI 사용 (고급: Ollama / LM Studio 로컬 연동 가능) |
 | Validation | Zod |
 | Test | Vitest (63건) |
 
@@ -397,11 +412,12 @@ tests/                        # 테스트 (63건)
 
 ## 설계 원칙
 
-1. **완전 로컬** — 외부 API 없이 로컬 LLM만 사용. 개인 데이터 외부 전송 없음
-2. **LLM 최소 사용** — 검색/매칭/양식 변환은 규칙 기반. LLM은 서류 생성에만
+1. **MCP 클라이언트 우선** — Claude Desktop/ChatGPT 등에 연결하면 바로 사용. 별도 LLM 설치 불필요
+2. **규칙 기반 핵심** — 검색/매칭/양식 변환은 규칙 기반. AI는 서류 생성에만
 3. **허위 경험 금지** — 기존 경험을 재구성/강조하는 방향으로만 지원
 4. **한국 시장 특화** — 한국식 이력서/자소서/채용공고 구조에 맞춤
 5. **확장 가능** — 새 채용 사이트 추가 = `SourceAdapter` 구현 1개
+6. **비개발자 친화** — 설치 후 대화만으로 모든 기능 사용 가능
 
 ---
 
