@@ -48,11 +48,11 @@ npm run build
 ┌─────────────────────────┐      Tool 호출      ┌──────────────────────┐
 │  MCP 클라이언트 (AI)     │ ─────────────────→ │  이 MCP 서버          │
 │                         │                     │                      │
-│  • Claude Desktop       │                     │  • 공고 검색/정규화    │
-│  • ChatGPT Desktop      │  ←───────────────── │  • 프로필 파싱        │
-│  • Claude Code (CLI)    │      결과 반환       │  • 매칭 분석          │
-│  • Gemini CLI           │                     │  • 양식 변환          │
-│  • 기타 MCP 호환 앱      │                     │  • 지원 관리          │
+│  • Claude Desktop (추천) │                     │  • 공고 검색/정규화    │
+│  • Claude Code (CLI)    │  ←───────────────── │  • 프로필 파싱        │
+│  • Gemini CLI           │      결과 반환       │  • 매칭 분석          │
+│  • 기타 MCP 호환 앱      │                     │  • 양식 변환          │
+│                         │                     │  • 지원 관리          │
 │                         │                     │                      │
 │  서류 작성은 클라이언트   │                     │  데이터 처리 + 로직    │
 │  AI가 직접 처리          │                     │                      │
@@ -61,52 +61,53 @@ npm run build
 ```
 
 아래에서 사용하는 클라이언트를 골라 설정하세요.
-모든 클라이언트에서 동일한 JSON 포맷(`mcpServers`)을 사용합니다.
 
-> **공통 설정 JSON** (클라이언트마다 파일 위치만 다릅니다):
-> ```json
-> {
->   "mcpServers": {
->     "job-hunting": {
->       "command": "node",
->       "args": ["/절대경로/job_hunting_mcp/dist/index.js"]
->     }
->   }
-> }
-> ```
+#### ✅ Claude Desktop (추천)
 
-#### Claude Desktop
+로컬 설정 파일에 JSON을 추가하면 됩니다.
 
 | OS | 설정 파일 경로 |
 |----|---------------|
 | **macOS** | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` |
 
-#### ChatGPT Desktop
+```json
+{
+  "mcpServers": {
+    "job-hunting": {
+      "command": "node",
+      "args": ["/절대경로/job_hunting_mcp/dist/index.js"]
+    }
+  }
+}
+```
 
-| OS | 설정 파일 경로 |
-|----|---------------|
-| **macOS** | `~/Library/Application Support/com.openai.chat/mcp.json` |
-| **Windows** | `%APPDATA%\com.openai.chat\mcp.json` |
-
-> 또는 앱 내에서 Settings → MCP Servers → Add Server로 GUI 추가도 가능합니다.
-
-#### Claude Code (CLI)
+#### ✅ Claude Code (CLI)
 
 ```bash
 claude mcp add job-hunting node /절대경로/job_hunting_mcp/dist/index.js
 ```
 
-#### Gemini CLI
+#### ✅ Gemini CLI
 
 | OS | 설정 파일 경로 |
 |----|---------------|
 | **macOS / Linux** | `~/.gemini/settings.json` |
 | **Windows** | `%USERPROFILE%\.gemini\settings.json` |
 
+Claude Desktop과 동일한 JSON 포맷(`mcpServers`)을 사용합니다.
+
+#### ⚠️ ChatGPT Desktop
+
+> **주의**: ChatGPT의 MCP 연결은 Claude Desktop처럼 로컬 설정 파일 방식이 아닙니다.
+> 현재(2026.03 기준) 공식 문서에 따르면 **Developer Mode → Apps** 흐름으로,
+> **ChatGPT Business / Enterprise / Edu** 요금제의 웹 환경에서 MCP 서버를 등록하는 방식입니다.
+> 개인 사용자용 로컬 stdio 연결은 아직 공식 지원되지 않을 수 있으므로,
+> [OpenAI 공식 MCP 문서](https://platform.openai.com/docs/guides/tools/mcp)를 확인하세요.
+
 #### 기타 MCP 호환 클라이언트
 
-MCP 표준을 지원하는 앱이면 어디서든 사용 가능합니다.
+MCP 표준(stdio)을 지원하는 앱이면 어디서든 사용 가능합니다.
 `command: "node"`, `args: ["/절대경로/dist/index.js"]`로 등록하면 됩니다.
 
 > **Windows 사용자 참고**: 경로 구분자를 `\\`로 사용하세요.
