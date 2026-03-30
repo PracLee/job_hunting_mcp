@@ -42,43 +42,10 @@ npm install
 npm run build
 ```
 
-### 2. 로컬 LLM 설정 (Ollama 추천)
+### 2. MCP 클라이언트 연결
 
-```bash
-# Ollama 설치 (https://ollama.com)
-# macOS
-brew install ollama
-
-# 모델 다운로드 (추천)
-ollama pull llama3        # 범용
-ollama pull gemma2        # 한국어 양호
-ollama pull qwen2.5       # 한국어 우수
-
-# Ollama 서버 시작
-ollama serve
-```
-
-### 3. 환경 설정
-
-```bash
-cp .env.example .env
-```
-
-`.env` 파일:
-
-```env
-# Ollama (기본값, 추천)
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3
-
-# 또는 LM Studio / vLLM 등 OpenAI 호환 로컬 서버
-# LLM_PROVIDER=openai-compatible
-# LOCAL_LLM_BASE_URL=http://localhost:1234/v1
-# LOCAL_LLM_MODEL=local-model
-```
-
-### 4. MCP 클라이언트 연결
+이 MCP 서버는 **MCP를 지원하는 모든 클라이언트**에서 사용할 수 있습니다.
+클라이언트는 사용자가 대화하는 UI이고, 우리 MCP 서버의 Tool을 호출하는 역할입니다.
 
 #### Claude Desktop
 
@@ -89,12 +56,7 @@ OLLAMA_MODEL=llama3
   "mcpServers": {
     "job-hunting": {
       "command": "node",
-      "args": ["/절대경로/job_hunting_mcp/dist/index.js"],
-      "env": {
-        "LLM_PROVIDER": "ollama",
-        "OLLAMA_BASE_URL": "http://localhost:11434",
-        "OLLAMA_MODEL": "llama3"
-      }
+      "args": ["/절대경로/job_hunting_mcp/dist/index.js"]
     }
   }
 }
@@ -106,12 +68,93 @@ OLLAMA_MODEL=llama3
 claude mcp add job-hunting node /절대경로/job_hunting_mcp/dist/index.js
 ```
 
+#### ChatGPT Desktop
+
+ChatGPT Desktop에서 MCP 서버를 추가합니다:
+
+1. 설정 → MCP Servers → Add Server
+2. `node /절대경로/job_hunting_mcp/dist/index.js` 입력
+
+#### Gemini CLI
+
+```bash
+# .gemini/settings.json 에 추가
+{
+  "mcpServers": {
+    "job-hunting": {
+      "command": "node",
+      "args": ["/절대경로/job_hunting_mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+#### 기타 MCP 호환 클라이언트
+
+MCP 표준을 지원하는 클라이언트라면 어디서든 사용 가능합니다.
+`command: "node"`, `args: ["/절대경로/dist/index.js"]`로 등록하면 됩니다.
+
 #### 직접 실행 (개발/테스트)
 
 ```bash
 npm run dev    # tsx로 직접 실행 (개발)
 npm start      # 빌드된 JS 실행
 npm test       # 테스트 (63건)
+```
+
+### 3. 로컬 LLM 설정 (선택사항)
+
+> **LLM 없이도 핵심 기능(공고 검색, 프로필 파싱, 매칭, 양식 변환, 지원 관리)은 완전히 동작합니다.**
+> 서류 생성/보강(경력기술서 맞춤화, 자소서 초안, 면접 준비)을 사용하려면 로컬 LLM이 필요합니다.
+
+```
+┌─────────────────────┐     Tool 호출     ┌──────────────────┐     서류 생성 시     ┌─────────────────┐
+│  MCP 클라이언트      │ ──────────────→  │  이 MCP 서버      │ ──────────────→   │  로컬 LLM       │
+│  (Claude Desktop,   │                   │  (job-hunting)    │                    │  (Ollama 등)    │
+│   ChatGPT Desktop,  │  ←──────────────  │                  │  ←──────────────   │                 │
+│   Gemini CLI 등)    │     결과 반환     │                  │     생성된 텍스트   │                 │
+└─────────────────────┘                   └──────────────────┘                    └─────────────────┘
+       사용자 UI                              우리 서버                          서류 작성용 LLM 엔진
+```
+
+- **MCP 클라이언트**: 사용자가 대화하는 UI. 우리 Tool을 호출하는 쪽
+- **이 MCP 서버**: 공고 검색, 매칭, 양식 변환 등 실제 로직 수행
+- **로컬 LLM**: MCP 서버 내부에서 서류 생성이 필요할 때만 호출되는 LLM 엔진
+
+#### 방법 A: Ollama (추천)
+
+```bash
+# Ollama 설치 (https://ollama.com)
+brew install ollama           # macOS
+# curl -fsSL https://ollama.com/install.sh | sh  # Linux
+
+# 모델 다운로드
+ollama pull llama3            # 범용
+ollama pull qwen2.5           # 한국어 우수 (추천)
+ollama pull gemma2            # 한국어 양호
+
+# Ollama 서버 시작
+ollama serve
+```
+
+환경 설정 (`.env`):
+```bash
+cp .env.example .env
+```
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5
+```
+
+#### 방법 B: LM Studio / vLLM 등 OpenAI 호환 로컬 서버
+
+```env
+LLM_PROVIDER=openai-compatible
+LOCAL_LLM_BASE_URL=http://localhost:1234/v1
+LOCAL_LLM_MODEL=local-model
+LOCAL_LLM_API_KEY=not-needed
 ```
 
 ---
