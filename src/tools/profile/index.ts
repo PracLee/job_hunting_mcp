@@ -323,6 +323,101 @@ export function registerProfileTools(server: McpServer): void {
   );
 
   server.tool(
+    'profile_list_versions',
+    '이전에 파싱/저장된 프로필의 전체 히스토리(버전 스냅샷) 목록을 조회합니다. 롤백할 때 필요한 ID를 찾을 수 있습니다.',
+    {},
+    async () => {
+      try {
+        const allProfiles = profileRepo.findAll();
+        const history = allProfiles.map(p => ({
+          id: p.id,
+          updated_at: p.updated_at,
+          name: p.name,
+          total_experience_months: p.total_experience_months,
+          skills_count: p.skills?.length || 0,
+        }));
+
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ history }, null, 2) }]
+        };
+      } catch (error) {
+        return { content: [{ type: 'text' as const, text: `조회 실패: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'profile_rollback_version',
+    '지정한 특정 과거 시점(버전)의 프로필 상태로 롤백(복구)합니다. 현재 유지중이던 변경사항은 모두 덮어씌워집니다.',
+    {
+      target_profile_id: z.string().describe('profile_list_versions에서 찾은 복구하고 싶은 과거 프로필의 ID'),
+    },
+    async (params) => {
+      try {
+        const targetProfile = profileRepo.findById(params.target_profile_id);
+        if (!targetProfile) return { content: [{ type: 'text' as const, text: '해당 ID의 프로필을 찾을 수 없습니다.' }], isError: true };
+
+        // SQLite상에서 최신 버전으로 취급되도록 현재 시간(updated_at)을 갱신하여 인플레이스 업데이트합니다.
+        profileRepo.update(targetProfile.id, {});
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              message: '성공적으로 롤백되어 마스터 프로필이 복구되었습니다.',
+              rolled_back_to_id: targetProfile.id,
+              restored_time: new Date().toISOString()
+            }, null, 2)
+          }]
+        };
+      } catch (error) {
+        return { content: [{ type: 'text' as const, text: `롤백 실패: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'profile_confirm_skills',
+    '파서가 자동 추출했던(parsed_structured) 현재 기술 스택들을 모두 검증된(user_confirmed) 상태로 강제 전환하여 확정합니다. 이후 새로 파싱해도 이 기술들은 무조건 보존됩니다.',
+    {
+      profile_id: z.string().optional().describe('수정할 프로필 ID (없으면 가장 최근 프로필)'),
+    },
+    async (params) => {
+      try {
+        let profile;
+        if (params.profile_id) profile = profileRepo.findById(params.profile_id);
+        else profile = profileRepo.findAll()[0] || null;
+
+        if (!profile) return { content: [{ type: 'text' as const, text: '수정할 프로필이 없습니다.' }], isError: true };
+
+        const currentSkills = profile.skills || [];
+        const confirmed = new Set(profile.user_confirmed_skills || []);
+        
+        currentSkills.forEach((s: any) => {
+           const name = typeof s === 'string' ? s : s.name;
+           confirmed.add(name);
+        });
+
+        profileRepo.update(profile.id, {
+          user_confirmed_skills: Array.from(confirmed),
+        });
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              message: '자동 추출되었던 스킬들이 모두 수동 확정계층(user_confirmed)으로 복사/저장되었습니다.',
+              total_confirmed_skills: Array.from(confirmed),
+            }, null, 2)
+          }]
+        };
+      } catch (error) {
+        return { content: [{ type: 'text' as const, text: `작업 실패: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
     'profile_get',
     '저장된 프로필을 조회합니다.',
     {

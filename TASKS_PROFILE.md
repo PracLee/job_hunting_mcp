@@ -46,6 +46,6 @@
 
 ## 🛡️ 4단계: 고급 사용자 편의 환경 (Optional)
 
-- [ ] `profile_versions` 테이블 신설어 이전 파싱 결과 캐싱 및 버전 관리
-- [ ] `rollback_to_version` 도구 추가: 파싱 결과가 이전보다 나쁠 때를 대비한 롤백 지원
-- [ ] `profile_confirm_fields` 도구 추가: 파서가 뽑아준 불확실한 `parsed` 값을 `user_confirmed` 레이어로 완벽 확정 짓는 기능
+- [x] `profile_versions` 테이블 신설어 이전 파싱 결과 캐싱 및 버전 관리
+- [x] `rollback_to_version` 도구 추가: 파싱 결과가 이전보다 나쁠 때를 대비한 롤백 지원
+- [x] `profile_confirm_fields` 도구 추가: 파서가 뽑아준 불확실한 `parsed` 값을 `user_confirmed` 레이어로 완벽 확정 짓는 기능
