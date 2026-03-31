@@ -1,7 +1,7 @@
 {
   "name": "job-hunting-mcp",
-  "version": "0.1.0",
-  "description": "한국 취업시장 특화 MCP 서버 — 채용공고 검색, 서류 맞춤화, 지원 관리",
+  "version": "1.0.0",
+  "description": "채용 공고 검색 및 서류 맞춤형 생성 MCP 서버",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

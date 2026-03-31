@@ -10,8 +10,8 @@ import { registerInterviewTools } from './tools/interview/index.js';
 
 export function createServer(): McpServer {
   const server = new McpServer({
-    name: 'job-hunting-mcp',
-    version: '0.1.0',
+    name: 'Job-Hunting-Pro',
+    version: '1.0.0',
   });
 
   // Tool 등록

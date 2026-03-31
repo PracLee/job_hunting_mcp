@@ -37,10 +37,10 @@
 
 잘못 추출되는(Hallucination) 현상을 억제하고 파싱 안정성을 올립니다.
 
-- [ ] 프로젝트명(예: Android API)이나 단순 문맥이 기술 스택으로 오인식되지 않도록 방어 (Prompt/규칙 개선)
-- [ ] 프로젝트 추출 실패 시(0건) 해당 부분을 날리지 않고 `Fallback 원문`으로 통째로 보존
-- [ ] (LLM 호출 시) 각 필드와 기술스택별로 `추출 근거(source_span)` 및 `신뢰도(confidence)` 같이 추출
-- [ ] Canonical Skill Taxonomy: 동일 기술의 표기파편화 방지 (예: SpringBoot, spring-boot -> Spring Boot로 통일 저장)
+- [x] 프로젝트명(예: Android API)이나 단순 문맥이 기술 스택으로 오인식되지 않도록 방어 (Prompt/규칙 개선)
+- [x] 프로젝트 추출 실패 시(0건) 해당 부분을 날리지 않고 `Fallback 원문`으로 통째로 보존
+- [x] (LLM 호출 시) 각 필드와 기술스택별로 `추출 근거(source_span)` 및 `신뢰도(confidence)` 같이 추출
+- [x] Canonical Skill Taxonomy: 동일 기술의 표기파편화 방지 (예: SpringBoot, spring-boot -> Spring Boot로 통일 저장)
 
 ---
 

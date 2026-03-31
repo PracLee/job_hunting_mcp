@@ -33,15 +33,22 @@ export function registerProfileTools(server: McpServer): void {
             .filter(Boolean).join('\n\n---\n\n');
 
           const response = await llm.generate({
-            system: `너는 한국 개발자 이력서 파싱 전문가다. 주어진 텍스트에서 아래 정보를 JSON으로 추출해라.
-반드시 아래 JSON 형식으로만 응답해라. 다른 텍스트는 포함하지 마라.
+            system: `너는 한국 개발자 이력서 파싱 전문가다. 주어진 텍스트에서 아래 정보를 JSON으로만 추출해라.
+
+【핵심 규칙】
+1. "WMS Android API" 같은 프로젝트명이나 조직 이름에서 기술 이름(Android 등)을 함부로 추측하여 추출하지 마라.
+2. 이력서에 명시적으로 사용했다고 쓰여있거나 "Role/Tech Stack"에 등장하는 기술만 추출해라.
+3. 기술 이름은 가급적 표준 명칭(예: Spring Boot, PostgreSQL, React)으로 통일해라.
+4. "프로젝트" 형식을 파악하기 불가능하다면, 억지로 여러 개로 쪼개지 말고 차라리 전체 내용을 "이력서 원문 프로젝트"라는 하나의 프로젝트 "description"에 모두 통째로 넣어서 내용 유실을 막아라.
+5. 각 기술 스택별로 어디서 추출했는지 문맥(source_span)을 "skills_confidence" 배열에 같이 담아라.
 
 {
   "name": "이름 (없으면 null)",
-  "email": "이메일 (없으면 null)",
-  "phone": "전화번호 (없으면 null)",
-  "total_experience_years": 숫자,
   "job_category": "backend|frontend|fullstack|mobile|data|devops|ai_ml|other",
+  "total_experience_years": 숫자,
+  "skills_confidence": [
+    {"name": "Spring Boot", "source_span": "주문 시스템 Spring Boot로 전환", "confidence": 0.9}
+  ],
   "projects": [
     {
       "name": "프로젝트명",
@@ -49,9 +56,7 @@ export function registerProfileTools(server: McpServer): void {
       "duration": "기간",
       "tech_stack": ["기술1"],
       "description": "한 줄 설명",
-      "achievements": ["성과1"],
-      "domain": "fintech|e-commerce|healthcare|edtech|logistics|social|gaming|saas|media|other",
-      "tags": ["msa", "performance", "refactoring"]
+      "achievements": ["성과1"]
     }
   ],
   "domains": ["fintech"],
@@ -70,22 +75,29 @@ export function registerProfileTools(server: McpServer): void {
           // LLM 실패 → 규칙 기반 결과만 사용
         }
 
-        // 3단계: 규칙 기반 + LLM 결과 병합 (규칙 기반 우선, LLM으로 보완)
+        // 3단계: 규칙 기반 + LLM 결과 병합
         const mergedName = ruleBased.name || llmParsed.name || null;
         const mergedEmail = ruleBased.email || llmParsed.email || null;
         const mergedPhone = ruleBased.phone || llmParsed.phone || null;
         const mergedYears = ruleBased.total_experience_years || llmParsed.total_experience_years || 0;
         const mergedCategory = ruleBased.job_category !== 'other' ? ruleBased.job_category : (llmParsed.job_category || 'other');
 
-        // 프로젝트: 규칙 기반이 있으면 사용, 없으면 LLM
+        // 스킬: LLM의 문맥 기반 추출(skills_confidence)을 최우선으로 하여 규칙 기반의 오인식(Hallucination) 방어
+        let mergedSkills: any[] = [];
+        if (llmParsed.skills_confidence && llmParsed.skills_confidence.length > 0) {
+          // LLM이 추출한 신뢰도 높은 스킬만 유지
+          mergedSkills = llmParsed.skills_confidence.map((s: any) => ({
+             name: s.name, level: 'intermediate', source: s.source_span, confidence: s.confidence 
+          }));
+        } else {
+          // LLM 실패 시 기존 규칙 기반 스킬 사용
+          mergedSkills = ruleBased.skills;
+        }
+
+        // 프로젝트: 규칙 기반 결과를 우선하되, 실패 시 LLM 결과 사용
         const mergedProjects = ruleBased.projects.length > 0
           ? ruleBased.projects
           : (llmParsed.projects || []);
-
-        // 스킬: 규칙 기반 (기술사전 매칭) 우선
-        const mergedSkills = ruleBased.skills.length > 0
-          ? ruleBased.skills
-          : (llmParsed.skills || []).map((s: any) => typeof s === 'string' ? { name: s, level: 'intermediate' } : s);
 
         // 도메인: 합집합
         const domainSet = new Set([...ruleBased.domains, ...(llmParsed.domains || [])]);
