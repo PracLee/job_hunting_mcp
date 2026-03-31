@@ -149,15 +149,20 @@ export function registerProfileTools(server: McpServer): void {
                 name: profile.name,
                 experience_years: profile.total_experience_years,
                 job_category: profile.job_category,
-                skills_count: mergedSkills.length,
+                skills_count: filteredSkills.length,
                 projects_count: mergedProjects.length,
                 domains: Array.from(domainSet),
-                extracted_skills: mergedSkills.map((s: any) => s.name || s),
+              },
+              diff: {
+                skills_raw_extracted: mergedSkills.map((s: any) => typeof s === 'string' ? s : s.name),
+                skills_ignored_by_user_rejection: Array.from(rejectedSet),
+                skills_finally_saved: filteredSkills.map((s: any) => typeof s === 'string' ? s : s.name),
+                user_confirmed_skills_carried_over: carryConfirmed
               },
               warnings,
               sections_found: Object.keys(ruleBased.sections),
               next_steps: [
-                'jobs_search 또는 jobs_add로 관심 공고를 등록하세요.',
+                '결과가 부정확하다면 profile_update_skills나 profile_update_experience 도구로 직접 보정하세요.',
                 'match_score_job으로 공고와의 적합도를 확인하세요.',
                 'resume_tailor로 공고에 맞게 서류를 맞춤화하세요.',
               ],
@@ -316,8 +321,35 @@ export function registerProfileTools(server: McpServer): void {
           };
         }
 
+        const layeredResponse = {
+          id: profile.id,
+          last_updated: profile.updated_at,
+          layer_user_confirmed: {
+            total_experience_years: profile.total_experience_years,
+            total_experience_months: profile.total_experience_months,
+            user_confirmed_skills: profile.user_confirmed_skills,
+            user_rejected_skills: profile.user_rejected_skills,
+          },
+          layer_parsed_structured: {
+            name: profile.name,
+            email: profile.email,
+            phone: profile.phone,
+            job_category: profile.job_category,
+            skills_extracted: profile.skills,
+            projects: profile.projects,
+            domains: profile.domains,
+            education: profile.education,
+            certifications: profile.certifications,
+          },
+          layer_raw_source: {
+            raw_resume_text: profile.raw_resume_text,
+            raw_career_text: profile.raw_career_text,
+            raw_portfolio_text: profile.raw_portfolio_text,
+          }
+        };
+
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify(profile, null, 2) }],
+          content: [{ type: 'text' as const, text: JSON.stringify(layeredResponse, null, 2) }],
         };
       } catch (error) {
         return {

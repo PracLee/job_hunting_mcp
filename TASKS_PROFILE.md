@@ -25,11 +25,11 @@
 
 결과물에 대한 "신뢰도 파악"과 "사용자 검수 단계"를 둡니다.
 
-- [ ] `profile_get` (조회 API): 응답 객체를 `raw_source`, `parsed_structured`, `user_confirmed` 세 가지 계층으로 분리 출력
-- [ ] `profile_parse_resume` (저장 API) 내부 로직 변경:
-    - [ ] 파싱 전/후의 Tech Stack `diff` (무엇이 추가되고 무엇이 빠졌는지) 결과 반환
-    - [ ] `user_rejected_skills`에 있는 기술은 파서가 찾아내도 강제로 무시(Hard Constraint)
-    - [ ] `user_confirmed_skills`에 명시된 기술은 파서 결과와 무관하게 무조건 보존
+- [x] `profile_get` (조회 API): 응답 객체를 `raw_source`, `parsed_structured`, `user_confirmed` 세 가지 계층으로 분리 출력
+- [x] `profile_parse_resume` (저장 API) 내부 로직 변경:
+    - [x] 파싱 전/후의 Tech Stack `diff` (무엇이 추가되고 무엇이 빠졌는지) 결과 반환
+    - [x] `user_rejected_skills`에 있는 기술은 파서가 찾아내도 강제로 무시(Hard Constraint)
+    - [x] `user_confirmed_skills`에 명시된 기술은 파서 결과와 무관하게 무조건 보존
 
 ---
 
