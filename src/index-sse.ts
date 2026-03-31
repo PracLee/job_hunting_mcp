@@ -10,15 +10,25 @@ async function main() {
   const app = express();
   app.use(cors());
 
-  // MCP 서버 및 전송 계층 생성
-  const server = createServer();
+  // 전역 인스턴스
+  let server = createServer();
   let transport: SSEServerTransport | null = null;
 
   // SSE 엔드포인트: 클라이언트가 연결(구독)하는 곳
   app.get('/sse', async (req, res) => {
+    console.log('🔗 클라이언트가 /sse 엔드포인트에 접속(재접속) 시도 중입니다...');
+    
+    // 기존 연결이 있다면 끊고 새 서버로 덮어씌움 (재연결 시 에러 방지)
+    if (transport) {
+      try {
+        await transport.close();
+      } catch (e) {}
+    }
+
+    server = createServer();
     transport = new SSEServerTransport('/message', res as any);
     await server.connect(transport);
-    console.log('🔗 클라이언트가 /sse 엔드포인트에 접속했습니다.');
+    console.log('✅ 클라이언트 연결 성공!');
   });
 
   // Message 엔드포인트: 클라이언트가 요청(Tool Call 등)을 보내는 곳
