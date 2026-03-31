@@ -19,3 +19,6 @@ vitest>=4.1.2                       # 유닛 / 통합 테스트 프레임워크
 @types/better-sqlite3
 @types/express
 @types/cors
+
+# --- 시스템 옵션 (선택사항: ChatGPT 등 외부망 연동 시) ---
+ngrok                               # 로컬 3000포트를 외부 URL로 포워딩 (npm install -g ngrok 또는 brew install ngrok)
