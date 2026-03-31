@@ -94,17 +94,33 @@ export function registerProfileTools(server: McpServer): void {
         const mergedEducation = ruleBased.education.length > 0
           ? ruleBased.education
           : (llmParsed.education || []);
+
         const mergedCerts = ruleBased.certifications.length > 0
           ? ruleBased.certifications
           : (llmParsed.certifications || []);
+
+        // 기존 프로필이 있다면 사용자의 수동 교정값을 유지(Carry-over)합니다.
+        const prevProfile = profileRepo.findAll()[0];
+        const carryConfirmed = prevProfile ? prevProfile.user_confirmed_skills : [];
+        const carryRejected = prevProfile ? prevProfile.user_rejected_skills : [];
+
+        // 새로 추출된 스킬 중, 사용자가 예전에 삭제(reject)했던 스킬이면 강제로 제거합니다.
+        const rejectedSet = new Set(carryRejected);
+        const filteredSkills = mergedSkills.filter((s: any) => {
+          const name = typeof s === 'string' ? s : s.name;
+          return !rejectedSet.has(name);
+        });
 
         const profile = profileRepo.save({
           name: mergedName,
           email: mergedEmail,
           phone: mergedPhone,
           total_experience_years: mergedYears,
+          total_experience_months: mergedYears * 12,
           job_category: mergedCategory,
-          skills: mergedSkills,
+          skills: filteredSkills,
+          user_confirmed_skills: carryConfirmed,
+          user_rejected_skills: carryRejected,
           projects: mergedProjects,
           domains: Array.from(domainSet),
           education: mergedEducation,
@@ -151,6 +167,124 @@ export function registerProfileTools(server: McpServer): void {
       } catch (error) {
         return {
           content: [{ type: 'text' as const, text: `파싱 실패: ${error instanceof Error ? error.message : String(error)}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    'profile_update_skills',
+    '마스터 프로필의 기술스택을 수동으로 교정합니다. (파서 오인식 보정 및 누락 항목 추가용)',
+    {
+      profile_id: z.string().optional().describe('수정할 프로필 ID (없으면 가장 최근 프로필)'),
+      add_skills: z.array(z.string()).optional().describe('수동으로 확실하게 추가할 기술스택 이름 목록'),
+      remove_skills: z.array(z.string()).optional().describe('파서가 문맥을 오인하여 잘못 추출한 삭제할 기술스택 이름 목록'),
+    },
+    async (params) => {
+      try {
+        let profile;
+        if (params.profile_id) profile = profileRepo.findById(params.profile_id);
+        else profile = profileRepo.findAll()[0] || null;
+
+        if (!profile) return { content: [{ type: 'text' as const, text: '수정할 프로필이 없습니다.' }], isError: true };
+
+        const currentSkills = profile.skills || [];
+        const confirmed = new Set(profile.user_confirmed_skills || []);
+        const rejected = new Set(profile.user_rejected_skills || []);
+
+        if (params.remove_skills) {
+          params.remove_skills.forEach(skill => {
+            rejected.add(skill);
+            confirmed.delete(skill);
+          });
+        }
+
+        if (params.add_skills) {
+          params.add_skills.forEach(skill => {
+            confirmed.add(skill);
+            rejected.delete(skill);
+          });
+        }
+
+        // Generate the new total skills array
+        // 1. Start with existing basic skills that haven't been rejected
+        let finalSkills = currentSkills.filter((s: any) => {
+          const name = typeof s === 'string' ? s : s.name;
+          return !rejected.has(name);
+        });
+
+        // 2. Add any globally confirmed skills if they aren't already there
+        confirmed.forEach(skill => {
+          const exists = finalSkills.find((s: any) => (typeof s === 'string' ? s : s.name) === skill);
+          if (!exists) {
+            finalSkills.push({ name: skill, level: 'intermediate' }); // Mock Skill object format
+          }
+        });
+
+        profileRepo.update(profile.id, {
+          skills: finalSkills,
+          user_confirmed_skills: Array.from(confirmed),
+          user_rejected_skills: Array.from(rejected),
+        });
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              message: '기술 스택이 성공적으로 교정되었습니다.',
+              updated_skills: finalSkills.map((s: any) => typeof s === 'string' ? s : s.name),
+              confirmed_skills: Array.from(confirmed),
+              rejected_skills: Array.from(rejected)
+            }, null, 2)
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text' as const, text: `수정 실패: ${error instanceof Error ? error.message : String(error)}` }],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.tool(
+    'profile_update_experience',
+    '마스터 프로필의 총 경력을 정밀하게 수동 교정합니다.',
+    {
+      profile_id: z.string().optional().describe('수정할 프로필 ID (없으면 가장 최근 프로필)'),
+      total_experience_months: z.number().describe('총 경력 (개월 수 단위, 예: 3년 8개월 -> 44)'),
+    },
+    async (params) => {
+      try {
+        let profile;
+        if (params.profile_id) profile = profileRepo.findById(params.profile_id);
+        else profile = profileRepo.findAll()[0] || null;
+
+        if (!profile) return { content: [{ type: 'text' as const, text: '수정할 프로필이 없습니다.' }], isError: true };
+
+        const months = params.total_experience_months;
+        const years = Number((months / 12).toFixed(2));
+
+        profileRepo.update(profile.id, {
+          total_experience_months: months,
+          total_experience_years: years,
+        });
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              message: '경력 기간이 성공적으로 교정되었습니다.',
+              total_experience_months: months,
+              total_experience_years: years,
+              formatted: `${Math.floor(months / 12)}년 ${months % 12}개월`,
+            }, null, 2)
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{ type: 'text' as const, text: `수정 실패: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,
         };
       }

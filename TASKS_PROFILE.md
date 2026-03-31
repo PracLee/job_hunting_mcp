@@ -9,13 +9,13 @@
 파서가 사용자의 수동 교정값을 덮어쓰는(Overwrite) 문제를 막고, 직접 정정할 수 있는 창구를 엽니다.
 
 ### 1-1. DB 스키마 수정
-- [ ] `user_profiles` 테이블에 `user_confirmed_skills` TEXT 필드 추가
-- [ ] `user_profiles` 테이블에 `user_rejected_skills` TEXT 필드 추가
-- [ ] 정밀한 경력 저장을 위해 `total_experience_months` 필드 추가 (기존 `total_experience_years`는 유지 또는 자동 계산)
+- [x] `user_profiles` 테이블에 `user_confirmed_skills` TEXT 필드 추가
+- [x] `user_profiles` 테이블에 `user_rejected_skills` TEXT 필드 추가
+- [x] 정밀한 경력 저장을 위해 `total_experience_months` 필드 추가 (기존 `total_experience_years`는 유지 또는 자동 계산)
 
 ### 1-2. 수동 수정 툴(MCP Tool) 개발
-- [ ] `profile_update_skills` 도구 추가: 특정 기술스택 수동 추가 및 삭제 (삭제 시 `user_rejected_skills`로 이동)
-- [ ] `profile_update_experience` 도구 추가: 총 경력(연/개월 수) 직접 변경 기능
+- [x] `profile_update_skills` 도구 추가: 특정 기술스택 수동 추가 및 삭제 (삭제 시 `user_rejected_skills`로 이동)
+- [x] `profile_update_experience` 도구 추가: 총 경력(연/개월 수) 직접 변경 기능
 - [ ] `profile_update_project` 도구 추가: 프로젝트명/역할/기간/사용기술 등 부분 수정 기능
 - [ ] 사용자 수정 사항이 반영되었는지 확인하기 위한 MCP 응답 포맷 개선
 
