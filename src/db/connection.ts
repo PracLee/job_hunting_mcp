@@ -1,13 +1,18 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (db) return db;
 
-  const dbPath = process.env.DB_PATH || './data/job_hunting.db';
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  // src/db/connection.ts (compiled to dist/db/connection.js), so navigate 2 directories up
+  const defaultPath = path.resolve(__dirname, '../../data/job_hunting.db');
+  const dbPath = process.env.DB_PATH || defaultPath;
+  
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
