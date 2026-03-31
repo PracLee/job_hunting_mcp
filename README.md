@@ -156,6 +156,19 @@ npm run dev:sse
 
 실행 후 브라우저 혹은 외부 MCP 클라이언트에서 `http://localhost:3000/sse` 엔드포인트로 연결할 수 있습니다.
 
+#### 💡 ChatGPT 등에 ngrok으로 연결하기 (외부망 포워딩)
+
+로컬 서버를 외부 웹 환경(ChatGPT 웹 등)과 연동하고 싶다면, `ngrok`을 사용하여 포트 포워딩을 할 수 있습니다.
+
+1. 로컬에서 서버 실행 (`npm run start:sse` : 3000포트)
+2. 새로운 터미널 창을 열고 `ngrok` 실행:
+   ```bash
+   ngrok http 3000
+   ```
+3. 생성된 Forwarding 도메인(`https://xxxx.ngrok.app` 등)을 복사합니다.
+4. ChatGPT GPTs나 타 외부 클라이언트에서 이 MCP 서버를 등록할 때, URL 뒤에 **반드시 `/sse` 를 붙여서** 기입합니다.
+   👉 `https://xxxx.ngrok-free.app/sse`
+
 ---
 
 ## (고급) 로컬 LLM 연동
