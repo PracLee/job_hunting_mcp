@@ -84,11 +84,11 @@ export function extractContact(text: string): { name: string | null; email: stri
   const email = text.match(/[\w.-]+@[\w.-]+\.\w+/)?.[0] || null;
   const phone = text.match(/0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/)?.[0] || null;
 
-  // 이름: 한글 2~4글자, 보통 첫 줄이나 "이름:" 뒤에 위치
+  // 이름: 보통 첫 줄이나 "이름:" 뒤에 위치 (한글 2글자 이상 제한 해제)
   let name: string | null = null;
-  const nameMatch = text.match(/(?:이름\s*[:：]\s*)([가-힣]{2,4})/);
+  const nameMatch = text.match(/(?:이름\s*[:：]\s*)([^\r\n]+)/);
   if (nameMatch) {
-    name = nameMatch[1];
+    name = nameMatch[1].trim();
   } else {
     // 첫 줄에서 한글 이름 추출 시도
     const firstLines = text.split('\n').slice(0, 5);
@@ -107,9 +107,13 @@ export function extractContact(text: string): { name: string | null; email: stri
 // --- 경력 연차 계산 ---
 
 export function calculateExperienceYears(text: string): number {
-  // "경력 5년" / "5년차" / "총 경력 5년" 직접 명시
-  const directMatch = text.match(/(?:총\s*)?경력\s*[:：]?\s*(\d+)\s*년/);
-  if (directMatch) return parseInt(directMatch[1]);
+  // "경력 3년 8개월" / "총 경력: 44개월" 등 복합 표현 처리
+  const directMatch = text.match(/(?:(?:총\s*)?경력|Experience)\s*[:：]?\s*(?:(\d+)\s*년)?\s*(?:(\d+)\s*개월)?/);
+  if (directMatch && (directMatch[1] || directMatch[2])) {
+    const y = parseInt(directMatch[1] || '0');
+    const m = parseInt(directMatch[2] || '0');
+    return y + (m / 12);
+  }
 
   const yearMatch = text.match(/(\d+)\s*년\s*차/);
   if (yearMatch) return parseInt(yearMatch[1]);
@@ -464,10 +468,10 @@ export function parseResumeText(
   // 4. 경력 연차
   const totalYears = calculateExperienceYears(allText);
 
-  // 5. 프로젝트
+  // 5. 프로젝트 (명시적 섹션이 없으면 전체 텍스트에서 파싱 시도)
   const projectText = sections.projects || sections.career || '';
   const careerSection = careerText || sections.career || '';
-  const projects = parseProjects(projectText || careerSection);
+  const projects = parseProjects(projectText || careerSection || allText);
 
   // 6. 학력
   const education = parseEducation(sections.education || '');

@@ -12,9 +12,11 @@ export function registerProfileTools(server: McpServer): void {
     'profile_parse_resume',
     '이력서/경력기술서 텍스트를 구조화된 프로필로 파싱합니다. 한 번 입력하면 마스터 프로필로 저장되어 모든 도구에서 사용됩니다.',
     {
-      resume_text: z.string().describe('이력서 원문 텍스트'),
+      resume_text: z.string().describe('이력서/경력기술서 자유 서술 텍스트 (줄바꿈 포함 자유 형태)'),
       career_description_text: z.string().optional().describe('경력기술서 원문 텍스트'),
       portfolio_text: z.string().optional().describe('포트폴리오/프로젝트 설명 텍스트'),
+      reset_overrides: z.boolean().optional().describe('TRUE: 이전에 수동으로 확정/거절한(Carry-over) 기술 스택이나 경험치 데이터를 완전히 초기화하고 이번 입력만으로 프로필을 새로 덮어씁니다. FALSE(기본값): 기존 수동 교정 내역을 병합합니다.'),
+      override_total_experience_months: z.number().optional().describe('사용자가 직접 지정하는 총 경력 월수. 입력 데이터에 명확한 개월 수가 있다면 파서를 거치지 않고 이 값으로 강제 확정합니다.'),
     },
     async (params) => {
       try {
@@ -111,10 +113,16 @@ export function registerProfileTools(server: McpServer): void {
           ? ruleBased.certifications
           : (llmParsed.certifications || []);
 
-        // 기존 프로필이 있다면 사용자의 수동 교정값을 유지(Carry-over)합니다.
-        const prevProfile = profileRepo.findAll()[0];
-        const carryConfirmed = prevProfile ? prevProfile.user_confirmed_skills : [];
-        const carryRejected = prevProfile ? prevProfile.user_rejected_skills : [];
+        let carryConfirmed: string[] = [];
+        let carryRejected: string[] = [];
+        const isReset = params.reset_overrides === true;
+        
+        if (!isReset) {
+          // 기존 프로필이 있다면 사용자의 수동 교정값을 유지(Carry-over)합니다.
+          const prevProfile = profileRepo.findAll()[0];
+          carryConfirmed = prevProfile ? prevProfile.user_confirmed_skills : [];
+          carryRejected = prevProfile ? prevProfile.user_rejected_skills : [];
+        }
 
         // 새로 추출된 스킬 중, 사용자가 예전에 삭제(reject)했던 스킬이면 강제로 제거합니다.
         const rejectedSet = new Set(carryRejected);
@@ -123,12 +131,18 @@ export function registerProfileTools(server: McpServer): void {
           return !rejectedSet.has(name);
         });
 
+        const finalMonths = params.override_total_experience_months !== undefined
+          ? params.override_total_experience_months
+          : Math.round(mergedYears * 12);
+        
+        const finalYears = Number((finalMonths / 12).toFixed(2));
+
         const profile = profileRepo.save({
           name: mergedName,
           email: mergedEmail,
           phone: mergedPhone,
-          total_experience_years: mergedYears,
-          total_experience_months: mergedYears * 12,
+          total_experience_years: finalYears,
+          total_experience_months: finalMonths,
           job_category: mergedCategory,
           skills: filteredSkills,
           user_confirmed_skills: carryConfirmed,
