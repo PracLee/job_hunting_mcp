@@ -334,12 +334,17 @@ LOCAL_LLM_API_KEY=not-needed
 | `jobs_get_detail` | 특정 공고 상세 조회 (URL 붙여넣기 지원) |
 | `jobs_add` | 공고 텍스트를 복붙하여 수동 등록 |
 
-### 프로필 (2개)
+### 프로필 (7개) - v1.0 엔진 탑재
 
 | Tool | 설명 |
 |------|------|
-| `profile_parse_resume` | 이력서/경력기술서 → 구조화된 프로필 |
-| `profile_get` | 저장된 프로필 조회 |
+| `profile_parse_resume` | 이력서/경력기술서 파싱. `reset_overrides`로 강제 초기화 및 파싱 diff 제공 |
+| `profile_get` | 3계층(`raw`, `parsed`, `confirmed`) 엄격 분리 구조로 프로필 전문 조회 |
+| `profile_update_skills` | 오인식 스킬 삭제(블랙리스트) 및 보조 스킬 영구 추가(화이트리스트) |
+| `profile_update_experience` | 자유 서술형 텍스트에서 꼬인 총 경력 개월 수 수동 정밀 교정 |
+| `profile_confirm_skills` | 자동 추출된(`parsed`) 전체 기술들을 "검증된(user_confirmed)" 계층으로 승격 |
+| `profile_list_versions` | 파싱할 때마다 저장된 과거 이력서 스냅샷(버전) 히스토리 조회 |
+| `profile_rollback_version` | 잘못 파싱된 기록을 버리고 특정 과거 버전의 ID를 통해 타임머신 복구 |
 
 ### 매칭 (2개)
 
