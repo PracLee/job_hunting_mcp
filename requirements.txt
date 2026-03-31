@@ -1,0 +1,21 @@
+# 이 프로젝트는 Node.js 환경(package.json)을 기반으로 동작합니다.
+# 실제 설치 시에는 터미널에서 `npm install` 명령어를 실행하시면 아래 패키지들이 자동 설치됩니다.
+# (이 파일은 프로젝트에 포함된 주요 의존성을 한눈에 보여드리기 위한 참고용 파일입니다.)
+
+# --- 코어 라이브러리 ---
+@modelcontextprotocol/sdk>=1.28.0   # MCP 서버 구동
+better-sqlite3>=12.8.0              # 로컬 데이터베이스 (별도 설치 필요없는 SQLite)
+cheerio>=1.2.0                      # 채용공고 웹 크롤링 시 HTML 파싱
+undici>=7.24.6                      # 내부 Fetch 용도 (Node 18 이상 내장 외 Fallback)
+zod>=4.3.6                          # 인자 및 데이터 검증
+express>=4.21.2                     # HTTP/SSE 로컬 통신용 서버
+cors>=2.8.5                         # 로컬 통신 Cross-Origin 허용
+
+# --- 개발 및 테스트 환경 (devDependencies) ---
+typescript>=6.0.2                   # 타입스크립트
+tsx>=4.21.0                         # TS 파일 즉시 실행(dev 환경)
+vitest>=4.1.2                       # 유닛 / 통합 테스트 프레임워크 
+@types/node
+@types/better-sqlite3
+@types/express
+@types/cors

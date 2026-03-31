@@ -138,6 +138,24 @@ npm start      # 빌드된 JS 실행
 npm test       # 테스트 (63건)
 ```
 
+### 5. 로컬 HTTP/SSE 서버로 띄우기 (네트워크 연동용)
+
+Gemini, Claude Desktop 등 로컬 프로세스 연결 외에 네트워크 통신(HTTP/SSE)으로 이 MCP 서버를 띄울 수 있도록 기능을 추가했습니다. 기본 3000번 포트로 실행됩니다.
+
+```bash
+# 종속성 설치
+npm install
+
+# 빌드 및 실행
+npm run build
+npm run start:sse
+
+# 개발 모드로 실행 시
+npm run dev:sse
+```
+
+실행 후 브라우저 혹은 외부 MCP 클라이언트에서 `http://localhost:3000/sse` 엔드포인트로 연결할 수 있습니다.
+
 ---
 
 ## (고급) 로컬 LLM 연동
