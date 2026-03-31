@@ -26,7 +26,7 @@ export function registerJobTools(server: McpServer): void {
 
   server.tool(
     'jobs_search',
-    '채용공고를 키워드/조건으로 검색합니다. 원티드 실시간 검색 또는 저장된 공고에서 검색합니다.',
+    '채용공고를 키워드/조건으로 검색합니다. [주의사항] 절대로 반환된 결과에 없는 공고를 지어내거나(Hallucination) 있는 공고를 없다고 하지 마세요. 오직 검색 결과로 반환된 JSON 데이터에만 의존하여 답변하세요.',
     {
       keywords: z.array(z.string()).describe('검색 키워드 (예: ["Java", "백엔드"])'),
       location: z.string().optional().describe('근무지 (예: "서울")'),
@@ -134,6 +134,7 @@ export function registerJobTools(server: McpServer): void {
               search_meta: { query_time_ms: queryTime, cached: params.search_mode === 'local' },
               warnings,
               tip: 'jobs_get_detail로 상세 정보를 확인하거나, match_score_job으로 적합도를 분석하세요.',
+              system_advice: '[시스템 경고] 이 목록에 없는 회사를 절대로 지어내서 추천하지 마세요. 결과가 0건이면 없다고 답해야 합니다.',
             }, null, 2),
           }],
         };
@@ -148,7 +149,7 @@ export function registerJobTools(server: McpServer): void {
 
   server.tool(
     'jobs_get_detail',
-    '특정 채용공고의 상세 정보를 조회합니다. 원티드 공고는 실시간 상세 정보를 가져옵니다.',
+    '특정 채용공고의 상세 정보를 조회합니다. [주의사항] 임의로 공고 내용을 지어내어 설명하지 마세요. 반드시 이 도구의 반환값에만 의존하여 답변하세요.',
     {
       job_id: z.string().describe('채용공고 ID 또는 원티드 URL'),
     },
