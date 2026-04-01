@@ -404,7 +404,7 @@ LOCAL_LLM_API_KEY=not-needed
 
 | 구분 | 기술 |
 |------|------|
-| Runtime | Node.js 20+ |
+| Runtime | Node.js 18+ (권장 20+) |
 | Language | TypeScript (strict) |
 | MCP SDK | `@modelcontextprotocol/sdk` |
 | DB | SQLite (better-sqlite3) — 로컬 파일, 별도 설치 불필요 |

@@ -25,6 +25,9 @@
   ],
   "author": "PracLee",
   "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "bugs": {
     "url": "https://github.com/PracLee/job_hunting_mcp/issues"
   },
