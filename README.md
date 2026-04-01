@@ -512,6 +512,9 @@ Claude Desktop Cowork 같은 환경은 내부적으로 별도의 Node.js 버전�
 
 **해결법**: 실행 환경의 Node.js 버전으로 맞춰서 rebuild
 
+> **nvm이 없다면 먼저 설치하세요**: https://github.com/nvm-sh/nvm
+> LLM 클라이언트마다 요구하는 Node.js 버전이 다를 수 있으므로, nvm으로 버전을 전환하는 것을 권장합니다.
+
 ```bash
 # 실행 환경 Node 버전 확인 후 해당 버전으로 rebuild
 nvm install 22   # 없으면 설치
