@@ -82,6 +82,7 @@ export function registerProfileTools(server: McpServer): void {
         const mergedEmail = ruleBased.email || llmParsed.email || null;
         const mergedPhone = ruleBased.phone || llmParsed.phone || null;
         const mergedYears = ruleBased.total_experience_years || llmParsed.total_experience_years || 0;
+        const mergedMonths = ruleBased.total_experience_months || Math.round(mergedYears * 12);
         const mergedCategory = ruleBased.job_category !== 'other' ? ruleBased.job_category : (llmParsed.job_category || 'other');
 
         // 스킬: LLM의 문맥 기반 추출(skills_confidence)을 최우선으로 하여 규칙 기반의 오인식(Hallucination) 방어
@@ -133,8 +134,8 @@ export function registerProfileTools(server: McpServer): void {
 
         const finalMonths = params.override_total_experience_months !== undefined
           ? params.override_total_experience_months
-          : Math.round(mergedYears * 12);
-        
+          : mergedMonths;
+
         const finalYears = Number((finalMonths / 12).toFixed(2));
 
         const profile = profileRepo.save({

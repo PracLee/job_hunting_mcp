@@ -12,6 +12,7 @@ export interface ParsedResume {
   email: string | null;
   phone: string | null;
   total_experience_years: number;
+  total_experience_months: number;
   job_category: string;
   skills: Skill[];
   projects: Project[];
@@ -28,9 +29,9 @@ const SECTION_PATTERNS: Array<{ key: string; pattern: RegExp }> = [
   { key: 'summary', pattern: /^(?:요약|소개|자기\s*소개|한\s*줄\s*소개|Profile\s*Summary|About)/im },
   { key: 'career', pattern: /^(?:경력\s*사항|경력|업무\s*경력|Work\s*Experience|Career|경력\s*기술)/im },
   { key: 'projects', pattern: /^(?:프로젝트|주요\s*프로젝트|Projects?|수행\s*프로젝트|참여\s*프로젝트)/im },
-  { key: 'skills', pattern: /^(?:기술\s*스택|보유\s*기술|기술|Skills?|Tech\s*Stack|기술\s*역량|Technical\s*Skills)/im },
+  { key: 'skills', pattern: /^(?:기술\s*스택|보유\s*기술|기술|Skills?|Tech\s*Stack|기술\s*역량|Technical\s*Skills|나의\s*스킬)/im },
   { key: 'education', pattern: /^(?:학력|학력\s*사항|Education|학교)/im },
-  { key: 'certifications', pattern: /^(?:자격증|자격\s*사항|Certification|License|수료|교육\s*이수)/im },
+  { key: 'certifications', pattern: /^(?:자격증|자격\s*사항|Certification|License|수료|교육\s*이수|경험\/활동\/교육)/im },
   { key: 'awards', pattern: /^(?:수상|수상\s*경력|Awards?)/im },
   { key: 'activities', pattern: /^(?:대외\s*활동|활동|커뮤니티|Activities|오픈\s*소스)/im },
   { key: 'languages', pattern: /^(?:어학|외국어|Language)/im },
@@ -48,8 +49,8 @@ export function splitSections(text: string): Record<string, string> {
     let matched = false;
 
     for (const { key, pattern } of SECTION_PATTERNS) {
-      // 섹션 헤더: 보통 단독 줄이거나 구분선(---) 뒤에 옴
-      if (pattern.test(trimmed) && trimmed.length < 40) {
+      // 섹션 헤더: 단독 줄이어야 하며 ":" 뒤에 내용이 있으면 헤더가 아님
+      if (pattern.test(trimmed) && trimmed.length < 40 && !/[:：].{2,}/.test(trimmed)) {
         // 이전 섹션 저장
         if (currentLines.length > 0) {
           sections[currentKey] = currentLines.join('\n').trim();
@@ -98,6 +99,9 @@ export function extractContact(text: string): { name: string | null; email: stri
       // "홍길동 | 백엔드 개발자" 같은 패턴
       const m2 = line.trim().match(/^([가-힣]{2,4})\s*[|·/]/);
       if (m2) { name = m2[1]; break; }
+      // "홍길동 경력" / "홍길동 사원" 같은 채용사이트 형식
+      const m3 = line.trim().match(/^([가-힣]{2,4})\s+(?:경력|사원|대리|과장|차장|부장|이사|팀장|개발자|엔지니어)/);
+      if (m3) { name = m3[1]; break; }
     }
   }
 
@@ -106,17 +110,29 @@ export function extractContact(text: string): { name: string | null; email: stri
 
 // --- 경력 연차 계산 ---
 
-export function calculateExperienceYears(text: string): number {
-  // "경력 3년 8개월" / "총 경력: 44개월" 등 복합 표현 처리
-  const directMatch = text.match(/(?:(?:총\s*)?경력|Experience)\s*[:：]?\s*(?:(\d+)\s*년)?\s*(?:(\d+)\s*개월)?/);
+export function calculateExperience(text: string): { years: number; months: number } {
+  // 1순위: "총 3년 10개월" / "경력 총 3년 10개월" 형태 (가장 명시적)
+  const totalMatch = text.match(/총\s*(\d+)\s*년\s*(\d+)\s*개월/);
+  if (totalMatch) {
+    const y = parseInt(totalMatch[1]);
+    const m = parseInt(totalMatch[2]);
+    return { years: y + m / 12, months: y * 12 + m };
+  }
+
+  // 2순위: "경력 3년" / "총 경력: 44개월" 등
+  const directMatch = text.match(/(?:(?:총\s*)?경력|Experience)\s*[:：]?\s*(?:총\s*)?(?:(\d+)\s*년)?\s*(?:(\d+)\s*개월)?/);
   if (directMatch && (directMatch[1] || directMatch[2])) {
     const y = parseInt(directMatch[1] || '0');
     const m = parseInt(directMatch[2] || '0');
-    return y + (m / 12);
+    const totalMonths = y * 12 + m;
+    return { years: y + (m / 12), months: totalMonths };
   }
 
   const yearMatch = text.match(/(\d+)\s*년\s*차/);
-  if (yearMatch) return parseInt(yearMatch[1]);
+  if (yearMatch) {
+    const y = parseInt(yearMatch[1]);
+    return { years: y, months: y * 12 };
+  }
 
   // 기간에서 추출: "2019.03 ~ 2024.02", "2019.03 - 현재"
   const periods: Array<{ start: Date; end: Date }> = [];
@@ -137,7 +153,7 @@ export function calculateExperienceYears(text: string): number {
     periods.push({ start, end });
   }
 
-  if (periods.length === 0) return 0;
+  if (periods.length === 0) return { years: 0, months: 0 };
 
   // 겹치지 않게 총 기간 계산
   periods.sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -147,28 +163,67 @@ export function calculateExperienceYears(text: string): number {
   for (const period of periods) {
     const effectiveStart = period.start > lastEnd ? period.start : lastEnd;
     if (period.end > effectiveStart) {
-      const months = (period.end.getFullYear() - effectiveStart.getFullYear()) * 12
+      const m = (period.end.getFullYear() - effectiveStart.getFullYear()) * 12
         + (period.end.getMonth() - effectiveStart.getMonth());
-      totalMonths += months;
+      totalMonths += m;
       lastEnd = period.end;
     }
   }
 
-  return Math.round(totalMonths / 12 * 10) / 10; // 소수 1자리
+  const years = Math.round(totalMonths / 12 * 10) / 10;
+  return { years, months: totalMonths };
+}
+
+// 하위 호환성 유지
+export function calculateExperienceYears(text: string): number {
+  return calculateExperience(text).years;
 }
 
 // --- 프로젝트 파싱 ---
+
+// 유효한 프로젝트가 아닌 섹션 헤더/개인정보 블록 필터
+const INVALID_PROJECT_NAME_PATTERNS = [
+  /^(?:학력|보유\s*기술|기술\s*스택|경력|경력\s*및\s*프로젝트|자격증|교육|소개|연락처|수상|활동|포트폴리오|이름|나의\s*스킬)$/,
+  /^이름\s*[:：]/,           // "이름: 이병재"
+  /^연락처\s*[:：]/,
+  /^(?:P\s+R\s+O\s+J\s+E\s+C\s+T)/i,  // "P R O J E C T 01" (포트폴리오 섹션 구분자)
+  /^(?:C\s+A\s+R\s+E\s+E\s+R)/i,
+  /^(?:A\s+B\s+O\s+U\s+T)/i,
+  /^(?:C\s+L\s+O\s+S\s+I\s+N\s+G)/i,
+];
+
+function isValidProjectName(name: string): boolean {
+  if (!name || name.length < 2) return false;
+  for (const pattern of INVALID_PROJECT_NAME_PATTERNS) {
+    if (pattern.test(name.trim())) return false;
+  }
+  return true;
+}
+
+function isValidProjectBlock(block: string): boolean {
+  // 너무 짧거나, 이메일/전화 패턴만 있는 블록은 프로젝트가 아님
+  if (block.trim().length < 30) return false;
+  const lines = block.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return false;
+  // 첫 줄이 이름이고 두 번째 줄이 연락처 패턴이면 개인정보 블록
+  if (/[\w.-]+@[\w.-]+\.\w+/.test(lines[0]) || /0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/.test(lines[0])) {
+    return false;
+  }
+  return true;
+}
 
 export function parseProjects(text: string): Project[] {
   if (!text) return [];
 
   const projects: Project[] = [];
-  // 프로젝트 구분: 번호, bullet, 또는 제목 패턴
   const blocks = splitProjectBlocks(text);
 
   for (const block of blocks) {
+    if (!isValidProjectBlock(block)) continue;
     const project = parseProjectBlock(block);
-    if (project) projects.push(project);
+    if (project && isValidProjectName(project.name)) {
+      projects.push(project);
+    }
   }
 
   return projects;
@@ -183,7 +238,6 @@ function splitProjectBlocks(text: string): string[] {
     const trimmed = line.trim();
     if (!trimmed) {
       if (current.length > 0) {
-        // 빈 줄 2개 이상이면 블록 분리
         const lastLine = current[current.length - 1]?.trim();
         if (!lastLine) {
           blocks.push(current.join('\n'));
@@ -195,12 +249,12 @@ function splitProjectBlocks(text: string): string[] {
       continue;
     }
 
-    // 새 프로젝트 시작 패턴 감지
     const isNewProject =
-      /^\d+[.)]\s/.test(trimmed) ||  // "1. 프로젝트명" / "1) 프로젝트명"
-      /^[■◆●▶►★☆]\s/.test(trimmed) || // bullet
-      /^(?:프로젝트\s*[:：])/.test(trimmed) || // "프로젝트:"
-      (/^\[.+\]/.test(trimmed) && trimmed.length < 60); // "[프로젝트명]"
+      /^\d+[.)]\s/.test(trimmed) ||                           // "1. 프로젝트명" / "1) 프로젝트명"
+      /^[■◆●▶►★☆]\s/.test(trimmed) ||                        // bullet
+      /^(?:프로젝트\s*[:：])/.test(trimmed) ||                 // "프로젝트:"
+      (/^\[.+\]/.test(trimmed) && trimmed.length < 60) ||    // "[프로젝트명]"
+      isProjectTitle(trimmed, current);                       // 영문 프로젝트명 or 한국어 짧은 타이틀
 
     if (isNewProject && current.length > 3) {
       blocks.push(current.join('\n'));
@@ -215,6 +269,29 @@ function splitProjectBlocks(text: string): string[] {
   }
 
   return blocks.filter(b => b.trim().length > 20);
+}
+
+/**
+ * 해당 줄이 프로젝트 제목처럼 생겼는지 판단
+ * - 영문 대문자 시작 짧은 단어 (STOCKPULSE, MirrAI)
+ * - 한글 짧은 제목 (혈당관리 앱, Job Hunting MCP)
+ * - 현재 블록이 충분히 쌓인 뒤에만 새 블록으로 간주
+ */
+function isProjectTitle(line: string, currentBlock: string[]): boolean {
+  if (currentBlock.length < 5) return false; // 너무 일찍 분리하지 않음
+  if (line.length > 60) return false;         // 너무 긴 줄은 제목이 아님
+
+  // "STOCKPULSE", "MirrAI" 같은 영문 프로젝트명
+  // bullet point 줄은 절대 제목이 아님
+  if (/^[-•·■◆►▶]/.test(line)) return false;
+
+  const isEnglishTitle = /^[A-Z][A-Za-z0-9\s\-_]+$/.test(line) && line.length < 40;
+  // "혈당관리 앱", "Job Hunting MCP" 같은 짧은 한/영 혼합 타이틀
+  const isKoreanTitle = /^[가-힣A-Za-z0-9\s\-_]+$/.test(line) &&
+    line.length < 30 &&
+    !/^(?:역할|기간|담당|성과|결과|기술|스택|팀구성|기여도)/.test(line);
+
+  return isEnglishTitle || isKoreanTitle;
 }
 
 function parseProjectBlock(block: string): Project | null {
@@ -236,7 +313,7 @@ function parseProjectBlock(block: string): Project | null {
 
   // 기간
   const durationMatch = fullText.match(/(?:기간|period)\s*[:：]?\s*([\d.]+\s*[~\-–—]\s*(?:[\d.]+|현재|재직\s*중))/i)
-    || fullText.match(/(20\d{2}[.\-/]\d{1,2}\s*[~\-–—]\s*(?:20\d{2}[.\-/]\d{1,2}|현재|재직\s*중))/i);
+    || fullText.match(/(20\d{2}[.\-/\s]\d{1,2}\s*[~\-–—]\s*(?:20\d{2}[.\-/\s]\d{1,2}|현재|재직\s*중))/i);
   const duration = durationMatch?.[1]?.trim() || '';
 
   // 역할
@@ -244,18 +321,18 @@ function parseProjectBlock(block: string): Project | null {
   const role = roleMatch?.[1]?.trim() || '';
 
   // 기술 스택
-  const techMatch = fullText.match(/(?:기술\s*(?:스택)?|사용\s*기술|tech|stack|기술\s*환경|개발\s*환경)\s*[:：]\s*(.+)/i);
+  // "기술" 단독 매치 방지 → "기술 스택:", "사용 기술:", "Tech Stack:" 처럼 명시적 형태만 허용
+  const techMatch = fullText.match(/(?:기술\s*스택|사용\s*기술|개발\s*환경|기술\s*환경|Tech\s*Stack)\s*[:：]\s*(.+)/i);
   let tech_stack: string[] = [];
   if (techMatch) {
     tech_stack = techMatch[1].split(/[,/·|]/).map(s => s.trim()).filter(s => s.length > 0 && s.length < 30);
   } else {
-    // 텍스트에서 자동 추출
     tech_stack = extractSkills(fullText);
   }
 
   // 설명: 역할/성과 이외의 텍스트
   const descLines = lines.slice(1).filter(l =>
-    !l.match(/^(?:기간|역할|담당|기술|사용\s*기술|성과|결과|tech|stack|period|role)/i) &&
+    !l.match(/^(?:기간|역할|담당|기술|사용\s*기술|성과|결과|tech|stack|period|role|팀구성|기여도)/i) &&
     !l.match(/^[-•·]\s*/)
   );
   const description = descLines.join(' ').slice(0, 300);
@@ -301,31 +378,30 @@ export function parseEducation(text: string): Education[] {
   const educations: Education[] = [];
   const lines = text.split('\n');
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  // 멀티라인 블록 파싱: 학교명을 찾고 전후 줄에서 전공/연도를 보완
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
     if (!trimmed) continue;
 
-    // "OO대학교 컴퓨터공학 학사 2021" 패턴
-    const fullMatch = trimmed.match(/(.+(?:대학교?|University))\s+(.+?)\s+(?:학사|석사|박사|Bachelor|Master|Ph\.?D\.?)\s*(?:졸업)?\s*(\d{4})?/i);
-    if (fullMatch) {
-      educations.push({
-        school: fullMatch[1].trim(),
-        major: fullMatch[2].trim(),
-        degree: extractDegree(trimmed),
-        year: fullMatch[3] ? parseInt(fullMatch[3]) : 0,
-      });
-      continue;
-    }
+    // 학교명 패턴 감지
+    const schoolMatch = trimmed.match(/([가-힣A-Za-z]+(?:대학교?|University|College|학원|고등학교)(?:\([\w]+\))?)/);
+    if (!schoolMatch) continue;
 
-    // "OO대학교 | 컴퓨터공학과 | 2017.03 ~ 2021.02" 패턴
-    const pipeMatch = trimmed.match(/(.+(?:대학교?|University))\s*[|·/]\s*(.+?)\s*[|·/]\s*.*?(\d{4})/i);
-    if (pipeMatch) {
-      educations.push({
-        school: pipeMatch[1].trim(),
-        major: pipeMatch[2].trim().replace(/과$/, ''),
-        degree: extractDegree(trimmed),
-        year: parseInt(pipeMatch[3]),
-      });
+    const school = schoolMatch[1].replace(/\(.*?\)/, '').trim();
+
+    // 현재 줄 + 인근 줄(±2)에서 전공, 학위, 연도 추출
+    const context = lines.slice(Math.max(0, i - 1), Math.min(lines.length, i + 4)).join(' ');
+
+    const major = context.match(/([가-힣]+(?:학과|학부|전공|공학))/)?.[1]?.trim() || '';
+    const degree = extractDegree(context);
+    const yearMatch = context.match(/(\d{4})\s*[.\-/]\s*\d{1,2}/);
+    // 졸업년도: 두 번째 연도(종료일) 추출
+    const allYears = [...context.matchAll(/(\d{4})/g)].map(m => parseInt(m[1]));
+    const year = allYears.length >= 2 ? allYears[allYears.length - 1] : (allYears[0] || 0);
+
+    // 같은 학교 중복 제거
+    if (!educations.find(e => e.school === school)) {
+      educations.push({ school, major, degree, year });
     }
   }
 
@@ -354,9 +430,9 @@ export function parseCertifications(text: string): string[] {
 const DOMAIN_KEYWORDS: Record<string, string[]> = {
   fintech: ['결제', '금융', '핀테크', '은행', '보험', '증권', '페이', 'payment', 'banking'],
   'e-commerce': ['이커머스', '쇼핑', '커머스', '주문', '배송', '장바구니', 'commerce'],
-  healthcare: ['헬스케어', '의료', '건강', '병원', '진료'],
-  edtech: ['에듀테크', '교육', '학습', 'LMS', '강의'],
-  logistics: ['물류', '배송', '택배', '창고', '재고'],
+  healthcare: ['헬스케어', '의료', '건강', '병원', '진료', '혈당'],
+  edtech: ['에듀테크', 'LMS', '강의', 'e-learning'],
+  logistics: ['물류', '배송', '택배', '창고', '재고', 'ERP', 'WMS'],
   social: ['소셜', 'SNS', '커뮤니티', '피드', '채팅', '메신저'],
   gaming: ['게임', '게이밍', 'unity', 'unreal'],
   saas: ['SaaS', 'B2B', '기업용', '어드민', '백오피스'],
@@ -455,7 +531,7 @@ export function parseResumeText(
   // 1. 섹션 분리
   const sections = splitSections(allText);
 
-  // 2. 연락처
+  // 2. 연락처 (헤더 → 연락처 섹션 → 전체 텍스트 순서로 시도)
   const contact = extractContact(sections._header || sections.contact || allText);
 
   // 3. 기술 추출
@@ -465,13 +541,14 @@ export function parseResumeText(
     level: 'intermediate' as const,
   }));
 
-  // 4. 경력 연차
-  const totalYears = calculateExperienceYears(allText);
+  // 4. 경력 연차 (years + months 모두 계산)
+  const experience = calculateExperience(allText);
 
-  // 5. 프로젝트 (명시적 섹션이 없으면 전체 텍스트에서 파싱 시도)
-  const projectText = sections.projects || sections.career || '';
-  const careerSection = careerText || sections.career || '';
-  const projects = parseProjects(projectText || careerSection || allText);
+  // 5. 프로젝트: 명시적 섹션만 사용 (allText 전체 파싱 금지)
+  //    프로젝트 섹션 → 경력 섹션 → 없으면 빈 배열
+  const projectText = sections.projects || '';
+  const careerSection = sections.career || (careerText ? careerText : '');
+  const projects = parseProjects(projectText || careerSection);
 
   // 6. 학력
   const education = parseEducation(sections.education || '');
@@ -492,7 +569,8 @@ export function parseResumeText(
     name: contact.name,
     email: contact.email,
     phone: contact.phone,
-    total_experience_years: totalYears,
+    total_experience_years: experience.years,
+    total_experience_months: experience.months,
     job_category: jobCategory,
     skills,
     projects,
