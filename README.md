@@ -497,6 +497,33 @@ tests/                        # 테스트 (63건)
 
 ---
 
+## 문제 해결
+
+### better-sqlite3 버전 불일치 오류 (NODE_MODULE_VERSION mismatch)
+
+**증상**: MCP 서버 실행 시 아래와 같은 오류 발생
+
+```
+Error: The module '...better_sqlite3.node' was compiled against a different Node.js version
+```
+
+**원인**: `better-sqlite3`는 네이티브 바이너리로, 빌드한 Node.js 버전과 실행 환경의 Node.js 버전이 다르면 충돌합니다.
+Claude Desktop Cowork 같은 환경은 내부적으로 별도의 Node.js 버전을 사용하는 경우가 있습니다.
+
+**해결법**: 실행 환경의 Node.js 버전으로 맞춰서 rebuild
+
+```bash
+# 실행 환경 Node 버전 확인 후 해당 버전으로 rebuild
+nvm install 22   # 없으면 설치
+nvm use 22
+cd /path/to/job_hunting_mcp
+npm rebuild better-sqlite3
+```
+
+이후 MCP 클라이언트(Claude Desktop 등)를 재시작하면 정상 동작합니다.
+
+---
+
 ## 라이선스
 
 MIT
