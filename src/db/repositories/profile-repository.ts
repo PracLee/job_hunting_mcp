@@ -10,15 +10,15 @@ export class ProfileRepository {
 
     db.prepare(`
       INSERT INTO user_profiles
-        (id, name, email, phone, total_experience_years, job_category,
-         skills, projects, domains, education, certifications,
+        (id, name, email, phone, total_experience_years, total_experience_months, job_category,
+         skills, user_confirmed_skills, user_rejected_skills, projects, domains, education, certifications,
          raw_resume_text, raw_career_text, raw_portfolio_text, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, profile.name, profile.email, profile.phone,
-      profile.total_experience_years, profile.job_category,
-      JSON.stringify(profile.skills), JSON.stringify(profile.projects),
-      JSON.stringify(profile.domains), JSON.stringify(profile.education),
+      profile.total_experience_years, profile.total_experience_months || 0, profile.job_category,
+      JSON.stringify(profile.skills), JSON.stringify(profile.user_confirmed_skills || []), JSON.stringify(profile.user_rejected_skills || []),
+      JSON.stringify(profile.projects), JSON.stringify(profile.domains), JSON.stringify(profile.education),
       JSON.stringify(profile.certifications),
       profile.raw_resume_text, profile.raw_career_text, profile.raw_portfolio_text,
       now, now
@@ -37,14 +37,14 @@ export class ProfileRepository {
 
     db.prepare(`
       UPDATE user_profiles SET
-        name = ?, email = ?, phone = ?, total_experience_years = ?,
-        job_category = ?, skills = ?, projects = ?, domains = ?,
+        name = ?, email = ?, phone = ?, total_experience_years = ?, total_experience_months = ?,
+        job_category = ?, skills = ?, user_confirmed_skills = ?, user_rejected_skills = ?, projects = ?, domains = ?,
         education = ?, certifications = ?, raw_resume_text = ?,
         raw_career_text = ?, raw_portfolio_text = ?, updated_at = ?
       WHERE id = ?
     `).run(
-      merged.name, merged.email, merged.phone, merged.total_experience_years,
-      merged.job_category, JSON.stringify(merged.skills), JSON.stringify(merged.projects),
+      merged.name, merged.email, merged.phone, merged.total_experience_years, merged.total_experience_months || 0,
+      merged.job_category, JSON.stringify(merged.skills), JSON.stringify(merged.user_confirmed_skills || []), JSON.stringify(merged.user_rejected_skills || []), JSON.stringify(merged.projects),
       JSON.stringify(merged.domains), JSON.stringify(merged.education),
       JSON.stringify(merged.certifications), merged.raw_resume_text,
       merged.raw_career_text, merged.raw_portfolio_text, now, id
@@ -72,8 +72,11 @@ export class ProfileRepository {
       email: row.email as string | null,
       phone: row.phone as string | null,
       total_experience_years: row.total_experience_years as number,
+      total_experience_months: row.total_experience_months as number || 0,
       job_category: row.job_category as string,
       skills: JSON.parse(row.skills as string || '[]'),
+      user_confirmed_skills: JSON.parse(row.user_confirmed_skills as string || '[]'),
+      user_rejected_skills: JSON.parse(row.user_rejected_skills as string || '[]'),
       projects: JSON.parse(row.projects as string || '[]'),
       domains: JSON.parse(row.domains as string || '[]'),
       education: JSON.parse(row.education as string || '[]'),

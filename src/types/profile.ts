@@ -28,8 +28,11 @@ export interface UserProfile {
   email: string | null;
   phone: string | null;
   total_experience_years: number;
+  total_experience_months: number;
   job_category: string;
   skills: Skill[];
+  user_confirmed_skills: string[];
+  user_rejected_skills: string[];
   projects: Project[];
   domains: string[];
   education: Education[];

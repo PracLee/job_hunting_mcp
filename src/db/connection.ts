@@ -34,8 +34,11 @@ function initSchema(db: Database.Database): void {
       email TEXT,
       phone TEXT,
       total_experience_years REAL DEFAULT 0,
+      total_experience_months INTEGER DEFAULT 0,
       job_category TEXT,
       skills TEXT DEFAULT '[]',
+      user_confirmed_skills TEXT DEFAULT '[]',
+      user_rejected_skills TEXT DEFAULT '[]',
       projects TEXT DEFAULT '[]',
       domains TEXT DEFAULT '[]',
       education TEXT DEFAULT '[]',
@@ -117,6 +120,10 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_match_score ON match_results(overall_score DESC);
     CREATE INDEX IF NOT EXISTS idx_app_profile_status ON applications(profile_id, status);
   `);
+
+  try { db.exec("ALTER TABLE user_profiles ADD COLUMN total_experience_months INTEGER DEFAULT 0;"); } catch (e) {}
+  try { db.exec("ALTER TABLE user_profiles ADD COLUMN user_confirmed_skills TEXT DEFAULT '[]';"); } catch (e) {}
+  try { db.exec("ALTER TABLE user_profiles ADD COLUMN user_rejected_skills TEXT DEFAULT '[]';"); } catch (e) {}
 }
 
 export function closeDb(): void {
