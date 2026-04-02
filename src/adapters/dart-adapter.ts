@@ -15,6 +15,7 @@ import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { lookupBrandMap } from '../core/brand-map.js';
 
 const inflateRaw = promisify(zlib.inflateRaw);
@@ -172,9 +173,11 @@ export class DartAdapter {
   }
 
   private getCacheFilePath(): string {
-    const dbPath = process.env.DB_PATH || './data/job_hunting.db';
-    const dataDir = path.dirname(path.resolve(dbPath));
-    return path.join(dataDir, 'dart_corp_codes.json');
+    if (process.env.DB_PATH) {
+      return path.join(path.dirname(path.resolve(process.env.DB_PATH)), 'dart_corp_codes.json');
+    }
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    return path.resolve(__dirname, '../../data/dart_corp_codes.json');
   }
 
   /**
