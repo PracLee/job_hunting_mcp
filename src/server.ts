@@ -7,6 +7,7 @@ import { registerCoverletterTools } from './tools/coverletter/index.js';
 import { registerPortfolioTools } from './tools/portfolio/index.js';
 import { registerApplicationTools } from './tools/application/index.js';
 import { registerInterviewTools } from './tools/interview/index.js';
+import { registerCompanyTools } from './tools/company/index.js';
 
 export function createServer(): McpServer {
   const server = new McpServer({
@@ -23,6 +24,7 @@ export function createServer(): McpServer {
   registerPortfolioTools(server);
   registerApplicationTools(server);
   registerInterviewTools(server);
+  registerCompanyTools(server);
 
   return server;
 }

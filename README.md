@@ -25,6 +25,7 @@
 | **포트폴리오 정렬** | 공고 기준으로 프로젝트 관련도 순 재배치 |
 | **지원 관리** | 지원 상태 추적 (저장 → 지원 → 합격/불합격) |
 | **면접 준비** | 공고+경력 기반 예상 질문 및 답변 포인트 |
+| **기업 성장성 분석** | DART 재무제표 3개년 + 뉴스 분석 → GROWING/STABLE/DECLINING 판정, 브랜드명 자동 변환 |
 
 ---
 
@@ -129,6 +130,25 @@ SARAMIN_API_KEY=your-saramin-api-key
 # DB 저장 위치 변경 (기본: ./data/job_hunting.db)
 DB_PATH=./data/job_hunting.db
 ```
+
+#### 기업 성장성 분석 (`company_analyze`) 사용 시
+
+`company_analyze` 도구는 DART(금융감독원 공시)와 네이버 뉴스 API를 사용합니다.
+API 키를 설정하지 않으면 도구 호출 시 설정 안내 메시지를 반환합니다.
+
+```env
+# DART OpenAPI 키 — 기업 재무제표(매출·영업이익·부채비율 등) 조회
+# 발급: https://opendart.fss.or.kr/ → 회원가입 → OpenAPI 신청 (무료, 즉시 발급)
+DART_API_KEY=your-dart-api-key
+
+# 네이버 검색 API — 기업 뉴스/보도 검색
+# 발급: https://developers.naver.com/apps/ → 애플리케이션 등록 → 사용 API: 검색 선택 (무료)
+NAVER_NEWS_CLIENT_ID=your-naver-client-id
+NAVER_NEWS_CLIENT_SECRET=your-naver-client-secret
+```
+
+> **참고**: DART API는 국내 상장사(코스피·코스닥)와 외부감사 대상 비상장사의 재무 데이터를 제공합니다.
+> 소규모 스타트업이나 DART 미공시 기업은 재무 데이터 없이 뉴스 분석만 진행됩니다.
 
 ### 4. 개발/테스트
 
@@ -376,6 +396,31 @@ LOCAL_LLM_API_KEY=not-needed
 | Tool | 설명 |
 |------|------|
 | `interview_prepare` | 예상 질문/답변 포인트 (클라이언트 AI가 처리) |
+
+### 기업 분석 (1개)
+
+| Tool | 설명 |
+|------|------|
+| `company_analyze` | DART 재무제표 + 네이버 뉴스로 기업 성장성 평가 (GROWING / STABLE / DECLINING) |
+
+**`company_analyze` 상세**
+
+- **데이터 소스**: DART 금융감독원 전자공시(재무제표 3개년) + 네이버 뉴스(최근 N일)
+- **지원 범위**: 국내 상장사(코스피·코스닥), 외부감사 비상장사, 국내 입점 외국계 법인
+- **브랜드명 자동 변환**: 별칭/브랜드명 → 법인명 자동 매핑 (예: `배민` → `우아한형제들`, `토스` → `비바리퍼블리카`)
+- **신뢰도 반환**: `search_path` + `confidence`(high/medium/low/none)로 검색 경로 투명하게 공개
+- **API 키 미설정 시**: 도구 호출 시점에 발급 안내 메시지 반환 (서버 재시작 불필요)
+
+```
+입력: "배민"
+  → 브랜드맵: 배민 → 우아한형제들
+  → DART: corp_code 조회 + 3개년 재무제표
+  → 네이버 뉴스: 최근 90일 관련 기사
+  → LLM 종합 분석 → GROWING / STABLE / DECLINING
+```
+
+> `DART_API_KEY`, `NAVER_NEWS_CLIENT_ID`, `NAVER_NEWS_CLIENT_SECRET` 설정 필요.
+> 키 미설정 시 도구 호출 시점에 발급 안내를 반환합니다.
 
 ---
 
