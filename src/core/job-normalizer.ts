@@ -25,7 +25,7 @@ export interface NormalizedJob {
 
 const JOB_SECTION_PATTERNS: Array<{ key: string; pattern: RegExp }> = [
   { key: 'responsibilities', pattern: /^(?:주요\s*업무|담당\s*업무|업무\s*내용|하는\s*일|What you'll do|Job Description|업무\s*소개)/im },
-  { key: 'qualifications', pattern: /^(?:자격\s*요건|필수\s*(?:요건|조건|사항)|지원\s*자격|Requirements?|Qualifications?|이런\s*분.*(?:찾|모시|필요))/im },
+  { key: 'qualifications', pattern: /^(?:자격\s*요건|필수\s*자격\s*요건|필수\s*(?:요건|조건|사항)|지원\s*자격|Requirements?|Qualifications?|이런\s*분.*(?:찾|모시|필요))/im },
   { key: 'preferences', pattern: /^(?:우대\s*(?:사항|조건|요건)|Preferred|Nice to have|이런\s*분.*(?:우대|더\s*좋))/im },
   { key: 'benefits', pattern: /^(?:복리\s*후생|혜택|Benefits?|Perks|이런\s*점.*(?:좋|제공))/im },
   { key: 'conditions', pattern: /^(?:근무\s*조건|근무\s*환경|근무지|근무\s*형태|Work\s*Conditions?)/im },
@@ -181,22 +181,23 @@ export function normalizeJobText(rawText: string, jobTitle: string = ''): Normal
   const sections = splitJobSections(rawText);
   const allText = rawText;
 
-  // 기술 스택 분리 (required vs preferred)
-  const reqSection = sections.qualifications || sections.tech_stack || '';
+  // required: 자격요건 섹션에서만 (tech_stack은 fallback 제외)
+  const reqSection = sections.qualifications || '';
   const prefSection = sections.preferences || '';
 
-  const allSkills = extractSkills(allText);
   const reqSkills = extractSkills(reqSection);
   const prefSkills = extractSkills(prefSection);
+  const techStackSkills = extractSkills(sections.tech_stack || '');
 
-  // required: 자격요건/기술스택 섹션에서 추출된 것
-  // preferred: 우대사항에서만 나오는 것
   const requiredSet = new Set(reqSkills);
   const preferredOnly = prefSkills.filter(s => !requiredSet.has(s));
 
-  // 자격요건에도 우대에도 안 나오지만 전체에서 추출된 것은 required로
-  const remainingSkills = allSkills.filter(s => !requiredSet.has(s) && !preferredOnly.includes(s));
-  const required_skills = [...reqSkills, ...remainingSkills];
+  // tech_stack은 required가 아닌 preferred로 합산 (중복 제거)
+  const preferred_skills = [...new Set([...preferredOnly, ...techStackSkills.filter(s => !requiredSet.has(s))])];
+
+  // 섹션 분리 완전 실패 시에만 전체 텍스트 fallback
+  const hasAnySections = Object.keys(sections).some(k => k !== '_intro');
+  const required_skills = hasAnySections ? reqSkills : extractSkills(allText);
 
   const exp = extractExperience(allText);
 
@@ -208,7 +209,7 @@ export function normalizeJobText(rawText: string, jobTitle: string = ''): Normal
     location: extractLocation(allText),
     salary_text: extractSalary(allText),
     required_skills: required_skills,
-    preferred_skills: preferredOnly,
+    preferred_skills: preferred_skills,
     responsibilities: extractBullets(sections.responsibilities || ''),
     qualifications: extractBullets(sections.qualifications || ''),
     preferences: extractBullets(sections.preferences || ''),

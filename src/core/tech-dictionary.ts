@@ -31,7 +31,7 @@ const TECH_ENTRIES: TechEntry[] = [
   { canonical: 'Python', aliases: ['python', '파이썬', 'py'], category: 'language', related: ['Django', 'FastAPI', 'Flask'] },
   { canonical: 'JavaScript', aliases: ['javascript', 'js', 'JS', '자바스크립트'], category: 'language', related: ['TypeScript', 'Node.js', 'React'] },
   { canonical: 'TypeScript', aliases: ['typescript', 'ts', 'TS', '타입스크립트'], category: 'language', related: ['JavaScript', 'Node.js'] },
-  { canonical: 'Go', aliases: ['go', 'golang', 'Golang', '고'], category: 'language' },
+  { canonical: 'Go', aliases: ['go', 'golang', 'Golang'], category: 'language' },
   { canonical: 'Rust', aliases: ['rust', '러스트'], category: 'language' },
   { canonical: 'C++', aliases: ['c++', 'cpp', 'CPP', 'C/C++'], category: 'language' },
   { canonical: 'C#', aliases: ['c#', 'csharp', 'C Sharp', '씨샵'], category: 'language', related: ['.NET'] },
@@ -69,11 +69,12 @@ const TECH_ENTRIES: TechEntry[] = [
   { canonical: 'Flutter', aliases: ['flutter', '플러터'], category: 'mobile', related: ['Dart'] },
 
   // Databases
-  { canonical: 'MySQL', aliases: ['mysql', 'MYSQL', 'MariaDB', 'mariadb'], category: 'database' },
+  { canonical: 'MySQL', aliases: ['mysql', 'MYSQL'], category: 'database' },
+  { canonical: 'MariaDB', aliases: ['mariadb', 'MariaDB'], category: 'database' },
   { canonical: 'PostgreSQL', aliases: ['postgresql', 'postgres', 'Postgres', 'pg', '포스트그레스'], category: 'database' },
   { canonical: 'MongoDB', aliases: ['mongodb', 'mongo', '몽고DB', '몽고디비'], category: 'database' },
   { canonical: 'Redis', aliases: ['redis', '레디스'], category: 'database' },
-  { canonical: 'Elasticsearch', aliases: ['elasticsearch', 'elastic', 'ES', '엘라스틱서치', 'ELK'], category: 'database' },
+  { canonical: 'Elasticsearch', aliases: ['elasticsearch', 'elastic', '엘라스틱서치', 'ELK'], category: 'database' },
   { canonical: 'Oracle', aliases: ['oracle', 'Oracle DB', '오라클'], category: 'database' },
   { canonical: 'DynamoDB', aliases: ['dynamodb', 'DynamoDB', '다이나모'], category: 'database', related: ['AWS'] },
   { canonical: 'Cassandra', aliases: ['cassandra', '카산드라'], category: 'database' },
