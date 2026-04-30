@@ -124,7 +124,7 @@ cp .env.example .env
 아래는 필요한 경우에만 설정합니다:
 
 ```env
-# 사람인 공고 검색을 사용하려면 (선택)
+# 사람인 API 검색 품질을 높이려면 (선택)
 SARAMIN_API_KEY=your-saramin-api-key
 
 # DB 저장 위치 변경 (기본: ./data/job_hunting.db)
@@ -155,7 +155,7 @@ NAVER_NEWS_CLIENT_SECRET=your-naver-client-secret
 ```bash
 npm run dev    # tsx로 직접 실행 (개발)
 npm start      # 빌드된 JS 실행
-npm test       # 테스트 (68건)
+npm test       # 테스트 (현재 Vitest 전체 스위트)
 ```
 
 ### 5. 로컬 HTTP/SSE 서버로 띄우기 (네트워크 연동용)
@@ -260,6 +260,7 @@ LOCAL_LLM_API_KEY=not-needed
 "Python/FastAPI 백엔드 공고 찾아줘"
 → jobs_search(keywords: ["Python", "FastAPI"])
 → `sources`를 생략하면 현재 사용 가능한 검색 소스를 모두 조회하고, 결과를 관련도 순으로 정렬
+→ 기본값 `auto_save: true` 이므로 온라인 검색 결과도 DB에 upsert되어 반환된 `job_id`로 바로 `match_score_job` 호출 가능
 
 # 방법 2: URL로 상세 조회
 "이 공고 상세 보여줘: https://www.wanted.co.kr/wd/12345"
@@ -277,6 +278,7 @@ LOCAL_LLM_API_KEY=not-needed
 → match_score_job(job_id: "jp_xxx")
 → overall_score + breakdown + scoring_meta 반환
 → 데이터가 비어 있는 축은 50점으로 고정하지 않고 제외하며, `scoring_meta.applied_weights`에 실제 반영된 가중치가 표시됨
+→ coverage가 50% 미만이면 `overall_score` 대신 `scoring_meta.provisional_score`, `confidence`, `INSUFFICIENT_DATA` 상태가 반환됨
 ```
 
 ### Step 4: 서류 맞춤화
@@ -355,7 +357,7 @@ LOCAL_LLM_API_KEY=not-needed
 
 | Tool | 설명 |
 |------|------|
-| `jobs_search` | 키워드/조건으로 공고 검색 (원티드/사람인/잡코리아/점핏/그룹바이/리멤버). `sources` 생략 시 사용 가능한 소스 전체 검색 |
+| `jobs_search` | 키워드/조건으로 공고 검색. `auto_save=true` 기본값으로 검색 결과를 DB에 upsert하며, `search_meta.sources_result_count`와 소스별 `warnings`를 함께 반환 |
 | `jobs_get_detail` | 특정 공고 상세 조회 (URL 붙여넣기 지원) |
 | `jobs_add` | 공고 텍스트를 복붙하여 수동 등록 |
 
@@ -375,7 +377,7 @@ LOCAL_LLM_API_KEY=not-needed
 
 | Tool | 설명 |
 |------|------|
-| `match_score_job` | 공고-프로필 5차원 매칭 분석. 축별 점수와 `scoring_meta`(적용 가중치/제외 축) 반환 |
+| `match_score_job` | 공고-프로필 5차원 매칭 분석. 축별 점수와 `scoring_meta`(적용 가중치/제외 축, coverage, confidence) 반환 |
 | `match_rank_jobs` | 여러 공고 적합도 순 랭킹 |
 
 ### 서류 (5개)
@@ -434,7 +436,7 @@ LOCAL_LLM_API_KEY=not-needed
 | 사이트 | 공고 검색 | 양식 변환 | API 키 필요 | 비고 |
 |--------|:--------:|:--------:|:----------:|------|
 | **원티드** | ✅ | ✅ | 불필요 | 웹 API |
-| **사람인** | ✅ | ✅ | `SARAMIN_API_KEY` | Open API |
+| **사람인** | ✅ | ✅ | 선택 (`SARAMIN_API_KEY`) | API 우선, 미설정 시 웹 크롤링 폴백 |
 | **잡코리아** | ✅ | ✅ | 불필요 | 웹 파싱 |
 | **점핏** | ✅ | ✅ | 불필요 | 웹 API |
 | **그룹바이** | ✅ | ✅ | 불필요 | 스타트업 전문, Next.js SSR 파싱 |
@@ -507,7 +509,7 @@ src/
 │   └── repositories/
 └── types/                    # 타입 정의
 
-tests/                        # 테스트 (68건)
+tests/                        # 테스트
 ├── services/                 # 서비스/코어 로직 테스트
 └── tools/                    # E2E 통합 테스트
 ```

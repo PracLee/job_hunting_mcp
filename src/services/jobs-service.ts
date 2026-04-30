@@ -6,8 +6,8 @@ import { JobkoreaAdapter } from '../adapters/jobkorea-adapter.js';
 import { JumpitAdapter } from '../adapters/jumpit-adapter.js';
 import { GroupbyAdapter } from '../adapters/groupby-adapter.js';
 import { RememberAdapter } from '../adapters/remember-adapter.js';
-import type { SourceAdapter } from '../adapters/base-adapter.js';
-import type { JobPosting, JobSource, JobCategory } from '../types/job.js';
+import type { SourceAdapter, SourceSearchResult } from '../adapters/base-adapter.js';
+import type { JobPosting, JobSource, JobCategory, JobSearchMode, JobSourceResultCount } from '../types/job.js';
 import { rankAndDedupeJobs } from '../core/job-rank.js';
 
 export interface SearchJobsParams {
@@ -18,7 +18,8 @@ export interface SearchJobsParams {
   job_category?: JobCategory;
   sources?: JobSource[];
   limit?: number;
-  search_mode?: 'online' | 'local' | 'both';
+  search_mode?: JobSearchMode;
+  auto_save?: boolean;
 }
 
 export interface GetJobDetailParams {
@@ -47,12 +48,18 @@ export class JobsService {
 
   async searchJobs(params: SearchJobsParams) {
     const startTime = Date.now();
-    const allJobs: JobPosting[] = [];
-    const sourcesSearched: JobSource[] = [];
     const warnings: string[] = [];
+    const jobsByKey = new Map<string, JobPosting>();
+    const sourcesSearched = new Set<JobSource>();
+    const zeroResultReasons = new Map<JobSource, string>();
     const requestedSources = this.resolveRequestedSources(params.sources);
+    const autoSave = params.auto_save ?? true;
 
     if (params.search_mode !== 'online') {
+      if (params.sources && params.sources.length > 0) {
+        params.sources.forEach(source => sourcesSearched.add(source));
+      }
+
       const localJobs = this.jobRepo.search({
         keywords: params.keywords,
         location: params.location,
@@ -62,9 +69,9 @@ export class JobsService {
         sources: params.sources as any,
         limit: params.limit,
       });
-      allJobs.push(...localJobs);
-      for (const source of new Set(localJobs.map(job => job.source))) {
-        if (!sourcesSearched.includes(source)) sourcesSearched.push(source);
+      localJobs.forEach(job => this.upsertSearchJob(jobsByKey, job));
+      if (!params.sources || params.sources.length === 0) {
+        localJobs.forEach(job => sourcesSearched.add(job.source));
       }
     }
 
@@ -78,46 +85,48 @@ export class JobsService {
         limit: params.limit,
       };
 
-      const existingIds = new Set(allJobs.map(job => `${job.source}:${job.source_id}`));
-
       await Promise.all(requestedSources.map(async source => {
         const adapter = this.adapters[source];
+        sourcesSearched.add(source as JobSource);
+
         if (!adapter) {
-          warnings.push(`지원하지 않는 소스: ${source}`);
+          this.pushWarning(warnings, `지원하지 않는 소스: ${source}`);
+          zeroResultReasons.set(source as JobSource, '지원하지 않는 소스입니다.');
           return;
         }
         if (!adapter.isAvailable()) {
-          warnings.push(`${source}: API 키가 설정되지 않았습니다. 환경변수를 확인하세요.`);
+          zeroResultReasons.set(source as JobSource, 'API 키가 설정되지 않았습니다. 환경변수를 확인하세요.');
+          this.pushWarning(warnings, `${source}: API 키가 설정되지 않았습니다. 환경변수를 확인하세요.`);
           return;
         }
 
         try {
-          const onlineJobs = await adapter.search(searchParams);
+          const { jobs: onlineJobs, warnings: sourceWarnings = [] } = await this.searchSource(adapter, searchParams);
+          sourceWarnings.forEach(warning => this.pushWarning(warnings, this.prefixSourceWarning(source as JobSource, warning)));
+
+          if (onlineJobs.length === 0 && sourceWarnings.length === 0) {
+            zeroResultReasons.set(source as JobSource, '검색어와 매칭되는 공고 없음');
+          }
 
           for (const job of onlineJobs) {
-            const key = `${job.source}:${job.source_id}`;
-            if (existingIds.has(key)) continue;
-
-            const existing = this.jobRepo.findBySourceId(job.source as JobSource, job.source_id);
-            if (!existing) {
-              this.jobRepo.save(job);
-            }
-            allJobs.push(job);
-            existingIds.add(key);
-          }
-
-          if (!sourcesSearched.includes(source as JobSource)) {
-            sourcesSearched.push(source as JobSource);
+            const persistedJob = autoSave ? this.jobRepo.save(job) : job;
+            this.upsertSearchJob(jobsByKey, persistedJob);
           }
         } catch (error) {
-          warnings.push(`${source} 검색 실패: ${error instanceof Error ? error.message : String(error)}`);
+          const reason = error instanceof Error ? error.message : String(error);
+          zeroResultReasons.set(source as JobSource, `검색 실패 - ${reason}`);
+          this.pushWarning(warnings, `${source} 검색 실패: ${reason}`);
         }
       }));
     }
 
     const queryTime = Date.now() - startTime;
     const limit = params.limit ?? 20;
-    const limitedJobs = rankAndDedupeJobs(allJobs, params.keywords, limit);
+    const limitedJobs = rankAndDedupeJobs(Array.from(jobsByKey.values()), params.keywords, limit);
+    const sourcesResultCount = this.buildSourceResultCount(limitedJobs, params, requestedSources);
+    this.addZeroResultWarnings(warnings, sourcesResultCount, zeroResultReasons, params, requestedSources);
+    const autoSaved = autoSave && params.search_mode !== 'local';
+    const canScoreImmediately = autoSaved || params.search_mode === 'local';
 
     return {
       total: limitedJobs.length,
@@ -132,10 +141,18 @@ export class JobsService {
         url: job.url,
         ...(job.also_on && job.also_on.length > 0 ? { also_on: job.also_on } : {}),
       })),
-      sources_searched: sourcesSearched,
-      search_meta: { query_time_ms: queryTime, cached: params.search_mode === 'local' },
+      sources_searched: Array.from(sourcesSearched),
+      search_meta: {
+        query_time_ms: queryTime,
+        cached: params.search_mode === 'local',
+        auto_saved: autoSaved,
+        search_mode: params.search_mode || 'both',
+        sources_result_count: sourcesResultCount,
+      },
       warnings,
-      tip: 'jobs_get_detail로 상세 정보를 확인하거나, match_score_job으로 적합도를 분석하세요.',
+      tip: canScoreImmediately
+        ? '반환된 job_id로 match_score_job을 바로 호출할 수 있습니다. 공고 정보가 얕으면 jobs_get_detail로 상세 정보를 보완하세요.'
+        : 'auto_save=false 상태입니다. 이 공고를 분석하려면 jobs_add로 저장하거나 jobs_search에서 auto_save를 true로 사용하세요.',
       system_advice: '[시스템 경고] 이 목록에 없는 회사를 절대로 지어내서 추천하지 마세요. 결과가 0건이면 없다고 답해야 합니다.',
     };
   }
@@ -170,9 +187,7 @@ export class JobsService {
 
         const detail = await adapter.fetchDetail(extractId(urlMatch));
         if (detail) {
-          const existing = this.jobRepo.findBySourceId(source as JobSource, detail.source_id);
-          if (!existing) this.jobRepo.save(detail);
-          return detail;
+          return this.jobRepo.save(detail);
         }
       }
 
@@ -189,7 +204,7 @@ export class JobsService {
       if (adapter?.isAvailable()) {
         const detail = await adapter.fetchDetail(job.source_id);
         if (detail) {
-          return detail;
+          return this.jobRepo.save({ ...detail, id: job.id });
         }
       }
     }
@@ -243,5 +258,118 @@ export class JobsService {
         'resume_tailor로 이 공고에 맞는 서류를 생성하세요.',
       ],
     };
+  }
+
+  private async searchSource(adapter: SourceAdapter, params: Omit<SearchJobsParams, 'sources' | 'search_mode' | 'auto_save'>): Promise<SourceSearchResult> {
+    if (adapter.searchWithMeta) {
+      return adapter.searchWithMeta(params);
+    }
+
+    return {
+      jobs: await adapter.search(params),
+      warnings: [],
+    };
+  }
+
+  private upsertSearchJob(jobsByKey: Map<string, JobPosting>, job: JobPosting): void {
+    const key = this.toJobKey(job);
+    const existing = jobsByKey.get(key);
+    if (!existing) {
+      jobsByKey.set(key, job);
+      return;
+    }
+
+    jobsByKey.set(key, this.pickRicherJob(existing, job));
+  }
+
+  private pickRicherJob(current: JobPosting, incoming: JobPosting): JobPosting {
+    const currentDepth = this.jobDepthScore(current);
+    const incomingDepth = this.jobDepthScore(incoming);
+
+    if (incomingDepth !== currentDepth) {
+      return incomingDepth > currentDepth ? incoming : current;
+    }
+
+    return incoming.fetched_at >= current.fetched_at ? incoming : current;
+  }
+
+  private jobDepthScore(job: JobPosting): number {
+    return (
+      job.raw_text.length
+      + job.required_skills.length * 8
+      + job.preferred_skills.length * 6
+      + job.responsibilities.length * 5
+      + job.qualifications.length * 5
+      + job.preferences.length * 4
+    );
+  }
+
+  private buildSourceResultCount(
+    rankedJobs: JobPosting[],
+    params: SearchJobsParams,
+    requestedSources: string[],
+  ): JobSourceResultCount {
+    const counts: JobSourceResultCount = {};
+    const sources = this.resolveDiagnosticSources(rankedJobs, params, requestedSources);
+
+    sources.forEach(source => {
+      counts[source] = 0;
+    });
+
+    rankedJobs.forEach(job => {
+      counts[job.source] = (counts[job.source] || 0) + 1;
+    });
+
+    return counts;
+  }
+
+  private resolveDiagnosticSources(
+    rankedJobs: JobPosting[],
+    params: SearchJobsParams,
+    requestedSources: string[],
+  ): JobSource[] {
+    const sources = new Set<JobSource>();
+
+    if (params.sources && params.sources.length > 0) {
+      params.sources.forEach(source => sources.add(source));
+    } else {
+      requestedSources.forEach(source => sources.add(source as JobSource));
+      rankedJobs.forEach(job => sources.add(job.source));
+    }
+
+    return Array.from(sources);
+  }
+
+  private addZeroResultWarnings(
+    warnings: string[],
+    sourcesResultCount: JobSourceResultCount,
+    zeroResultReasons: Map<JobSource, string>,
+    params: SearchJobsParams,
+    requestedSources: string[],
+  ): void {
+    const sources = this.resolveDiagnosticSources([], params, requestedSources);
+
+    for (const source of sources) {
+      if ((sourcesResultCount[source] || 0) > 0) continue;
+
+      const fallbackReason = params.search_mode === 'local'
+        ? '저장된 공고 없음'
+        : '검색어와 매칭되는 공고 없음';
+      this.pushWarning(warnings, `${source}: ${zeroResultReasons.get(source) || fallbackReason}`);
+    }
+  }
+
+  private prefixSourceWarning(source: JobSource, warning: string): string {
+    return warning.startsWith(`${source}:`) ? warning : `${source}: ${warning}`;
+  }
+
+  private pushWarning(warnings: string[], warning: string): void {
+    if (!warnings.includes(warning)) {
+      warnings.push(warning);
+    }
+  }
+
+  private toJobKey(job: JobPosting): string {
+    return `${job.source}:${job.source_id}`;
   }
 }

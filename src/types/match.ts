@@ -8,6 +8,10 @@ export interface MatchScoreBreakdown {
 
 export interface MatchScoringMeta {
   coverage_percent: number;
+  confidence: 'high' | 'medium' | 'low' | 'none';
+  status: 'complete' | 'insufficient_data';
+  message?: string;
+  provisional_score?: number;
   base_weights: Record<keyof MatchScoreBreakdown, number>;
   applied_weights: Partial<Record<keyof MatchScoreBreakdown, number>>;
   ignored_dimensions: Partial<Record<keyof MatchScoreBreakdown, string>>;
@@ -16,13 +20,15 @@ export interface MatchScoringMeta {
 export interface MatchResult {
   job_id: string;
   profile_id: string;
-  overall_score: number;
+  overall_score: number | null;
+  confidence: MatchScoringMeta['confidence'];
   breakdown: MatchScoreBreakdown;
   scoring_meta: MatchScoringMeta;
   strengths: string[];
   gaps: string[];
   resume_highlights: string[];
-  priority: 'A' | 'B' | 'C' | 'D';
+  priority: 'A' | 'B' | 'C' | 'D' | 'INSUFFICIENT_DATA';
+  message?: string;
 }
 
 export interface MatchScoreParams {

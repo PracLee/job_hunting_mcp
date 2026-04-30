@@ -10,13 +10,15 @@ export const MATCH_WEIGHTS = {
   preference_coverage: 0.15,
 } as const satisfies Record<keyof MatchScoreBreakdown, number>;
 
+const MINIMUM_CONFIDENT_COVERAGE = 50;
+
 type MatchDimension = keyof MatchScoreBreakdown;
 
 const TOTAL_MATCH_WEIGHT = Object.values(MATCH_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
 
 export interface CalculatedMatchScore {
-  overall_score: number;
-  priority: 'A' | 'B' | 'C' | 'D';
+  overall_score: number | null;
+  priority: 'A' | 'B' | 'C' | 'D' | 'INSUFFICIENT_DATA';
   breakdown: MatchScoreBreakdown;
   scoring_meta: MatchScoringMeta;
 }
@@ -52,15 +54,29 @@ export function calculateMatchScore(profile: UserProfile, job: JobPosting): Calc
     usedWeight += weight;
   }
 
-  const overall_score = usedWeight === 0 ? 0 : Math.round(weightedTotal / usedWeight);
-  const priority = overall_score >= 80 ? 'A' : overall_score >= 60 ? 'B' : overall_score >= 40 ? 'C' : 'D';
+  const provisionalScore = usedWeight === 0 ? null : Math.round(weightedTotal / usedWeight);
+  const coveragePercent = Math.round((usedWeight / TOTAL_MATCH_WEIGHT) * 100);
+  const hasEnoughCoverage = coveragePercent >= MINIMUM_CONFIDENT_COVERAGE;
+  const overall_score = hasEnoughCoverage ? provisionalScore : null;
+  const priority = hasEnoughCoverage && provisionalScore !== null
+    ? scoreToPriority(provisionalScore)
+    : 'INSUFFICIENT_DATA';
+  const confidence = getConfidenceLevel(coveragePercent);
+  const status = hasEnoughCoverage ? 'complete' : 'insufficient_data';
+  const message = hasEnoughCoverage
+    ? undefined
+    : '공고 정보가 부족하여 정확한 분석이 어렵습니다. jobs_get_detail로 상세 정보를 보완하세요.';
 
   return {
     overall_score,
     priority,
     breakdown,
     scoring_meta: {
-      coverage_percent: Math.round((usedWeight / TOTAL_MATCH_WEIGHT) * 100),
+      coverage_percent: coveragePercent,
+      confidence,
+      status,
+      message,
+      provisional_score: !hasEnoughCoverage && provisionalScore !== null ? provisionalScore : undefined,
       base_weights: { ...MATCH_WEIGHTS },
       applied_weights: normalizeWeights(weightedScores, usedWeight),
       ignored_dimensions,
@@ -186,6 +202,20 @@ function normalizeWeights(
   }
 
   return appliedWeights;
+}
+
+function scoreToPriority(score: number): 'A' | 'B' | 'C' | 'D' {
+  if (score >= 80) return 'A';
+  if (score >= 60) return 'B';
+  if (score >= 40) return 'C';
+  return 'D';
+}
+
+function getConfidenceLevel(coveragePercent: number): MatchScoringMeta['confidence'] {
+  if (coveragePercent === 0) return 'none';
+  if (coveragePercent < MINIMUM_CONFIDENT_COVERAGE) return 'low';
+  if (coveragePercent < 80) return 'medium';
+  return 'high';
 }
 
 function getIgnoreReason(dimension: MatchDimension, profile: UserProfile, job: JobPosting): string {

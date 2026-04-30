@@ -206,5 +206,61 @@ describe('match-scoring (매칭 로직)', () => {
       expect(result.breakdown.domain_fit).toBe(100);
       expect(result.scoring_meta.ignored_dimensions.domain_fit).toBeUndefined();
     });
+
+    it('coverage가 50% 미만이면 overall_score를 보류하고 데이터 부족 상태를 반환한다', () => {
+      const profile: UserProfile = {
+        id: 'up_low_coverage',
+        name: '테스트',
+        email: null,
+        phone: null,
+        total_experience_years: 5,
+        total_experience_months: 60,
+        job_category: 'backend',
+        skills: [],
+        user_confirmed_skills: [],
+        user_rejected_skills: [],
+        projects: [],
+        domains: [],
+        education: [],
+        certifications: [],
+        raw_resume_text: '',
+        raw_career_text: null,
+        raw_portfolio_text: null,
+        created_at: '',
+        updated_at: '',
+      };
+
+      const job: JobPosting = {
+        id: 'jp_low_coverage',
+        source: 'wanted',
+        source_id: 'wanted_low_coverage',
+        company_name: '테스트 회사',
+        job_title: '백엔드 개발자',
+        job_category: 'backend',
+        experience_min: 3,
+        experience_max: 7,
+        employment_type: '정규직',
+        location: '서울',
+        salary_text: null,
+        required_skills: [],
+        preferred_skills: [],
+        responsibilities: [],
+        qualifications: [],
+        preferences: [],
+        deadline: null,
+        url: 'https://example.com/job-3',
+        raw_text: '',
+        fetched_at: new Date().toISOString(),
+      };
+
+      const result = calculateMatchScore(profile, job);
+
+      expect(result.scoring_meta.coverage_percent).toBe(20);
+      expect(result.scoring_meta.confidence).toBe('low');
+      expect(result.scoring_meta.status).toBe('insufficient_data');
+      expect(result.scoring_meta.provisional_score).toBe(100);
+      expect(result.overall_score).toBeNull();
+      expect(result.priority).toBe('INSUFFICIENT_DATA');
+    });
   });
 });

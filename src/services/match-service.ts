@@ -74,9 +74,11 @@ export class MatchService {
       company_name: job.company_name,
       job_title: job.job_title,
       overall_score: matchScore.overall_score,
+      confidence: matchScore.scoring_meta.confidence,
       priority: matchScore.priority,
       breakdown: matchScore.breakdown,
       scoring_meta: matchScore.scoring_meta,
+      message: matchScore.scoring_meta.message,
       strengths,
       gaps,
       resume_highlights,
@@ -90,12 +92,13 @@ export class MatchService {
     for (const jobId of params.job_ids) {
       const job = this.jobRepo.findById(jobId);
       if (!job) continue;
+      const matchScore = calculateMatchScore(profile, job);
 
       rankings.push({
         job_id: jobId,
         company_name: job.company_name,
         job_title: job.job_title,
-        score: calculateMatchScore(profile, job).overall_score,
+        score: matchScore.overall_score ?? matchScore.scoring_meta.provisional_score ?? 0,
       });
     }
 

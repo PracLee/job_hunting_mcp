@@ -19,6 +19,8 @@ export function registerJobTools(server: McpServer): void {
       limit: z.number().optional().default(20),
       search_mode: z.enum(['online', 'local', 'both']).optional().default('both')
         .describe('online: 원티드 실시간 검색, local: 저장된 공고만, both: 둘 다'),
+      auto_save: z.boolean().optional().default(true)
+        .describe('true면 온라인 검색 결과를 DB에 upsert하여 반환된 job_id로 바로 match_score_job을 호출할 수 있습니다.'),
     },
     async params => {
       try {

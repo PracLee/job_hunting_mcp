@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JobkoreaAdapter } from '../../src/adapters/jobkorea-adapter.js';
 import { JumpitAdapter } from '../../src/adapters/jumpit-adapter.js';
 import { GroupbyAdapter } from '../../src/adapters/groupby-adapter.js';
+import { SaraminAdapter } from '../../src/adapters/saramin-adapter.js';
 
 describe('platform adapters', () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -243,6 +244,57 @@ describe('platform adapters', () => {
         location: '서울시 강남구 테헤란로 151 5층',
       });
       expect(jobs[0].required_skills).toEqual(expect.arrayContaining(['Python', 'Spark']));
+    });
+  });
+
+  describe('SaraminAdapter', () => {
+    it('falls back to crawling when no API key is configured', async () => {
+      const originalKey = process.env.SARAMIN_API_KEY;
+      delete process.env.SARAMIN_API_KEY;
+
+      fetchMock.mockResolvedValueOnce(textResponse(`
+        <div class="item_recruit">
+          <div class="area_job">
+            <h2 class="job_tit">
+              <a href="/zf_user/jobs/relay/view?view_type=search&rec_idx=53591426">고(故)팀장 백엔드 개발자 채용 (경력 5년이상)</a>
+            </h2>
+            <div class="job_date"><span class="date">~ 05/10(일)</span></div>
+            <div class="job_condition">
+              <span>서울 강서구</span>
+              <span>경력 5~15년</span>
+              <span>초대졸↑</span>
+              <span>정규직</span>
+            </div>
+            <div class="job_sector">
+              <a>백엔드/서버개발</a>
+              <a>웹개발</a>
+            </div>
+          </div>
+          <div class="area_corp">
+            <strong class="corp_name"><a>(주)블랙라임</a></strong>
+          </div>
+        </div>
+      `));
+
+      const result = await new SaraminAdapter().searchWithMeta!({
+        keywords: ['백엔드'],
+        limit: 5,
+      });
+
+      process.env.SARAMIN_API_KEY = originalKey;
+
+      expect(result.warnings).toContain('API 키가 없어 웹 크롤링 폴백을 사용했습니다.');
+      expect(result.jobs).toHaveLength(1);
+      expect(result.jobs[0]).toMatchObject({
+        source: 'saramin',
+        source_id: '53591426',
+        company_name: '(주)블랙라임',
+        job_title: '고(故)팀장 백엔드 개발자 채용 (경력 5년이상)',
+        location: '서울 강서구',
+        experience_min: 5,
+        experience_max: 15,
+        employment_type: '정규직',
+      });
     });
   });
 });
