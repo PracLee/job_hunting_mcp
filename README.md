@@ -155,7 +155,7 @@ NAVER_NEWS_CLIENT_SECRET=your-naver-client-secret
 ```bash
 npm run dev    # tsx로 직접 실행 (개발)
 npm start      # 빌드된 JS 실행
-npm test       # 테스트 (63건)
+npm test       # 테스트 (68건)
 ```
 
 ### 5. 로컬 HTTP/SSE 서버로 띄우기 (네트워크 연동용)
@@ -257,6 +257,10 @@ LOCAL_LLM_API_KEY=not-needed
 "서울, Java 백엔드, 3~5년차 공고 찾아줘"
 → jobs_search(keywords: ["Java", "백엔드"], location: "서울", sources: ["wanted", "jumpit", "groupby", "remember"])
 
+"Python/FastAPI 백엔드 공고 찾아줘"
+→ jobs_search(keywords: ["Python", "FastAPI"])
+→ `sources`를 생략하면 현재 사용 가능한 검색 소스를 모두 조회하고, 결과를 관련도 순으로 정렬
+
 # 방법 2: URL로 상세 조회
 "이 공고 상세 보여줘: https://www.wanted.co.kr/wd/12345"
 → jobs_get_detail(job_id: "https://www.wanted.co.kr/wd/12345")
@@ -271,7 +275,8 @@ LOCAL_LLM_API_KEY=not-needed
 ```
 "이 공고랑 내 프로필 매칭해줘"
 → match_score_job(job_id: "jp_xxx")
-→ 기술 매칭 85점, 경력 적합 100점, 부족한 점: Kafka 경험 없음 ...
+→ overall_score + breakdown + scoring_meta 반환
+→ 데이터가 비어 있는 축은 50점으로 고정하지 않고 제외하며, `scoring_meta.applied_weights`에 실제 반영된 가중치가 표시됨
 ```
 
 ### Step 4: 서류 맞춤화
@@ -350,7 +355,7 @@ LOCAL_LLM_API_KEY=not-needed
 
 | Tool | 설명 |
 |------|------|
-| `jobs_search` | 키워드/조건으로 공고 검색 (원티드/사람인/잡코리아/점핏/그룹바이/리멤버) |
+| `jobs_search` | 키워드/조건으로 공고 검색 (원티드/사람인/잡코리아/점핏/그룹바이/리멤버). `sources` 생략 시 사용 가능한 소스 전체 검색 |
 | `jobs_get_detail` | 특정 공고 상세 조회 (URL 붙여넣기 지원) |
 | `jobs_add` | 공고 텍스트를 복붙하여 수동 등록 |
 
@@ -370,7 +375,7 @@ LOCAL_LLM_API_KEY=not-needed
 
 | Tool | 설명 |
 |------|------|
-| `match_score_job` | 공고-프로필 5차원 매칭 분석 |
+| `match_score_job` | 공고-프로필 5차원 매칭 분석. 축별 점수와 `scoring_meta`(적용 가중치/제외 축) 반환 |
 | `match_rank_jobs` | 여러 공고 적합도 순 랭킹 |
 
 ### 서류 (5개)
@@ -455,7 +460,7 @@ LOCAL_LLM_API_KEY=not-needed
 | DB | SQLite (better-sqlite3) — 로컬 파일, 별도 설치 불필요 |
 | LLM | MCP 클라이언트 AI 사용 (고급: Ollama / LM Studio 로컬 연동 가능) |
 | Validation | Zod |
-| Test | Vitest (63건) |
+| Test | Vitest (68건) |
 
 ---
 
@@ -465,7 +470,7 @@ LOCAL_LLM_API_KEY=not-needed
 src/
 ├── index.ts                  # 진입점
 ├── server.ts                 # MCP 서버 설정
-├── tools/                    # Tool 핸들러 (16개)
+├── tools/                    # MCP Tool 레이어 (입력 검증/응답 직렬화)
 │   ├── jobs/                 # 채용공고 검색/추가
 │   ├── profile/              # 프로필 파싱
 │   ├── match/                # 적합도 분석
@@ -474,6 +479,12 @@ src/
 │   ├── portfolio/            # 포트폴리오 정렬
 │   ├── application/          # 지원 관리
 │   └── interview/            # 면접 준비
+├── services/                 # 도메인 서비스 레이어
+│   ├── jobs-service.ts       # 검색 집계/정렬
+│   ├── profile-service.ts    # 프로필 파싱/교정
+│   ├── match-service.ts      # 매칭 분석
+│   ├── resume-service.ts     # 이력서 맞춤화/변환
+│   └── ...                   # coverletter/company/application 등
 ├── adapters/                 # 채용 사이트별 어댑터
 │   ├── base-adapter.ts       # 공통 인터페이스
 │   ├── wanted-adapter.ts     # 원티드
@@ -487,6 +498,8 @@ src/
 │   ├── tech-dictionary.ts    # 기술 사전 (80+ 항목, 한국어 동의어)
 │   ├── resume-parser.ts      # 이력서 규칙 기반 파싱
 │   ├── job-normalizer.ts     # 공고 텍스트 정규화
+│   ├── job-search.ts         # 공고 검색 relevance 점수 계산
+│   ├── match-scoring.ts      # 적합도 계산 로직
 │   ├── platform-templates.ts # 플랫폼별 양식 템플릿 (6종)
 │   └── utils.ts
 ├── db/                       # SQLite DB
@@ -494,9 +507,8 @@ src/
 │   └── repositories/
 └── types/                    # 타입 정의
 
-tests/                        # 테스트 (63건)
-├── core/                     # 코어 로직 테스트
-├── services/                 # 매칭/템플릿 테스트
+tests/                        # 테스트 (68건)
+├── services/                 # 서비스/코어 로직 테스트
 └── tools/                    # E2E 통합 테스트
 ```
 

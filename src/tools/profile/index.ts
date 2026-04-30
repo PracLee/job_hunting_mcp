@@ -1,12 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ProfileRepository } from '../../db/repositories/profile-repository.js';
-import { extractSkills } from '../../core/tech-dictionary.js';
-import { parseResumeText } from '../../core/resume-parser.js';
-import { getLlmClient } from '../../core/llm-client.js';
+import { ProfileService } from '../../services/profile-service.js';
 
 export function registerProfileTools(server: McpServer): void {
-  const profileRepo = new ProfileRepository();
+  const profileService = new ProfileService();
 
   server.tool(
     'profile_parse_resume',
@@ -18,191 +15,17 @@ export function registerProfileTools(server: McpServer): void {
       reset_overrides: z.boolean().optional().describe('TRUE: 이전에 수동으로 확정/거절한(Carry-over) 기술 스택이나 경험치 데이터를 완전히 초기화하고 이번 입력만으로 프로필을 새로 덮어씁니다. FALSE(기본값): 기존 수동 교정 내역을 병합합니다.'),
       override_total_experience_months: z.number().optional().describe('사용자가 직접 지정하는 총 경력 월수. 입력 데이터에 명확한 개월 수가 있다면 파서를 거치지 않고 이 값으로 강제 확정합니다.'),
     },
-    async (params) => {
+    async params => {
       try {
-        // 1단계: 규칙 기반 파싱 (LLM 없이 동작)
-        const ruleBased = parseResumeText(
-          params.resume_text,
-          params.career_description_text,
-          params.portfolio_text,
-        );
-
-        // 2단계: LLM 보조 파싱 (실패해도 진행)
-        let llmParsed: any = {};
-        try {
-          const llm = getLlmClient();
-          const allText = [params.resume_text, params.career_description_text, params.portfolio_text]
-            .filter(Boolean).join('\n\n---\n\n');
-
-          const response = await llm.generate({
-            system: `너는 한국 개발자 이력서 파싱 전문가다. 주어진 텍스트에서 아래 정보를 JSON으로만 추출해라.
-
-【핵심 규칙】
-1. "WMS Android API" 같은 프로젝트명이나 조직 이름에서 기술 이름(Android 등)을 함부로 추측하여 추출하지 마라.
-2. 이력서에 명시적으로 사용했다고 쓰여있거나 "Role/Tech Stack"에 등장하는 기술만 추출해라.
-3. 기술 이름은 가급적 표준 명칭(예: Spring Boot, PostgreSQL, React)으로 통일해라.
-4. "프로젝트" 형식을 파악하기 불가능하다면, 억지로 여러 개로 쪼개지 말고 차라리 전체 내용을 "이력서 원문 프로젝트"라는 하나의 프로젝트 "description"에 모두 통째로 넣어서 내용 유실을 막아라.
-5. 각 기술 스택별로 어디서 추출했는지 문맥(source_span)을 "skills_confidence" 배열에 같이 담아라.
-
-{
-  "name": "이름 (없으면 null)",
-  "job_category": "backend|frontend|fullstack|mobile|data|devops|ai_ml|other",
-  "total_experience_years": 숫자,
-  "skills_confidence": [
-    {"name": "Spring Boot", "source_span": "주문 시스템 Spring Boot로 전환", "confidence": 0.9}
-  ],
-  "projects": [
-    {
-      "name": "프로젝트명",
-      "role": "역할",
-      "duration": "기간",
-      "tech_stack": ["기술1"],
-      "description": "한 줄 설명",
-      "achievements": ["성과1"]
-    }
-  ],
-  "domains": ["fintech"],
-  "education": [{"school": "", "major": "", "degree": "학사|석사|박사", "year": 2021}],
-  "certifications": []
-}`,
-            messages: [{ role: 'user', content: allText }],
-            temperature: 0.1,
-          });
-
-          const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            llmParsed = JSON.parse(jsonMatch[0]);
-          }
-        } catch {
-          // LLM 실패 → 규칙 기반 결과만 사용
-        }
-
-        // 3단계: 규칙 기반 + LLM 결과 병합
-        const mergedName = ruleBased.name || llmParsed.name || null;
-        const mergedEmail = ruleBased.email || llmParsed.email || null;
-        const mergedPhone = ruleBased.phone || llmParsed.phone || null;
-        const mergedYears = ruleBased.total_experience_years || llmParsed.total_experience_years || 0;
-        const mergedMonths = ruleBased.total_experience_months || Math.round(mergedYears * 12);
-        const mergedCategory = ruleBased.job_category !== 'other' ? ruleBased.job_category : (llmParsed.job_category || 'other');
-
-        // 스킬: LLM의 문맥 기반 추출(skills_confidence)을 최우선으로 하여 규칙 기반의 오인식(Hallucination) 방어
-        let mergedSkills: any[] = [];
-        if (llmParsed.skills_confidence && llmParsed.skills_confidence.length > 0) {
-          // LLM이 추출한 신뢰도 높은 스킬만 유지
-          mergedSkills = llmParsed.skills_confidence.map((s: any) => ({
-             name: s.name, level: 'intermediate', source: s.source_span, confidence: s.confidence 
-          }));
-        } else {
-          // LLM 실패 시 기존 규칙 기반 스킬 사용
-          mergedSkills = ruleBased.skills;
-        }
-
-        // 프로젝트: 규칙 기반 결과를 우선하되, 실패 시 LLM 결과 사용
-        const mergedProjects = ruleBased.projects.length > 0
-          ? ruleBased.projects
-          : (llmParsed.projects || []);
-
-        // 도메인: 합집합
-        const domainSet = new Set([...ruleBased.domains, ...(llmParsed.domains || [])]);
-
-        // 학력/자격증: 규칙 기반 + LLM 보완
-        const mergedEducation = ruleBased.education.length > 0
-          ? ruleBased.education
-          : (llmParsed.education || []);
-
-        const mergedCerts = ruleBased.certifications.length > 0
-          ? ruleBased.certifications
-          : (llmParsed.certifications || []);
-
-        let carryConfirmed: string[] = [];
-        let carryRejected: string[] = [];
-        const isReset = params.reset_overrides === true;
-        
-        if (!isReset) {
-          // 기존 프로필이 있다면 사용자의 수동 교정값을 유지(Carry-over)합니다.
-          const prevProfile = profileRepo.findAll()[0];
-          carryConfirmed = prevProfile ? prevProfile.user_confirmed_skills : [];
-          carryRejected = prevProfile ? prevProfile.user_rejected_skills : [];
-        }
-
-        // 새로 추출된 스킬 중, 사용자가 예전에 삭제(reject)했던 스킬이면 강제로 제거합니다.
-        const rejectedSet = new Set(carryRejected);
-        const filteredSkills = mergedSkills.filter((s: any) => {
-          const name = typeof s === 'string' ? s : s.name;
-          return !rejectedSet.has(name);
-        });
-
-        const finalMonths = params.override_total_experience_months !== undefined
-          ? params.override_total_experience_months
-          : mergedMonths;
-
-        const finalYears = Number((finalMonths / 12).toFixed(2));
-
-        const profile = profileRepo.save({
-          name: mergedName,
-          email: mergedEmail,
-          phone: mergedPhone,
-          total_experience_years: finalYears,
-          total_experience_months: finalMonths,
-          job_category: mergedCategory,
-          skills: filteredSkills,
-          user_confirmed_skills: carryConfirmed,
-          user_rejected_skills: carryRejected,
-          projects: mergedProjects,
-          domains: Array.from(domainSet),
-          education: mergedEducation,
-          certifications: mergedCerts,
-          raw_resume_text: params.resume_text,
-          raw_career_text: params.career_description_text || null,
-          raw_portfolio_text: params.portfolio_text || null,
-        });
-
-        const warnings: string[] = [];
-        if (!mergedName) warnings.push('이름을 추출하지 못했습니다.');
-        if (mergedSkills.length === 0) warnings.push('기술스택을 추출하지 못했습니다.');
-        if (mergedProjects.length === 0) warnings.push('프로젝트를 추출하지 못했습니다. 경력기술서를 추가로 입력해주세요.');
-        if (mergedYears === 0) warnings.push('경력 연차를 추출하지 못했습니다.');
-
-        const parsingMethod = llmParsed.name ? '규칙 기반 + LLM 보조' : '규칙 기반 (LLM 미사용)';
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              message: '프로필이 저장되었습니다.',
-              profile_id: profile.id,
-              parsing_method: parsingMethod,
-              summary: {
-                name: profile.name,
-                experience_years: profile.total_experience_years,
-                job_category: profile.job_category,
-                skills_count: filteredSkills.length,
-                projects_count: mergedProjects.length,
-                domains: Array.from(domainSet),
-              },
-              diff: {
-                skills_raw_extracted: mergedSkills.map((s: any) => typeof s === 'string' ? s : s.name),
-                skills_ignored_by_user_rejection: Array.from(rejectedSet),
-                skills_finally_saved: filteredSkills.map((s: any) => typeof s === 'string' ? s : s.name),
-                user_confirmed_skills_carried_over: carryConfirmed
-              },
-              warnings,
-              sections_found: Object.keys(ruleBased.sections),
-              next_steps: [
-                '결과가 부정확하다면 profile_update_skills나 profile_update_experience 도구로 직접 보정하세요.',
-                'match_score_job으로 공고와의 적합도를 확인하세요.',
-                'resume_tailor로 공고에 맞게 서류를 맞춤화하세요.',
-              ],
-            }, null, 2),
-          }],
-        };
+        const result = await profileService.parseResume(params);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
         return {
           content: [{ type: 'text' as const, text: `파싱 실패: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.tool(
@@ -213,71 +36,17 @@ export function registerProfileTools(server: McpServer): void {
       add_skills: z.array(z.string()).optional().describe('수동으로 확실하게 추가할 기술스택 이름 목록'),
       remove_skills: z.array(z.string()).optional().describe('파서가 문맥을 오인하여 잘못 추출한 삭제할 기술스택 이름 목록'),
     },
-    async (params) => {
+    async params => {
       try {
-        let profile;
-        if (params.profile_id) profile = profileRepo.findById(params.profile_id);
-        else profile = profileRepo.findAll()[0] || null;
-
-        if (!profile) return { content: [{ type: 'text' as const, text: '수정할 프로필이 없습니다.' }], isError: true };
-
-        const currentSkills = profile.skills || [];
-        const confirmed = new Set(profile.user_confirmed_skills || []);
-        const rejected = new Set(profile.user_rejected_skills || []);
-
-        if (params.remove_skills) {
-          params.remove_skills.forEach(skill => {
-            rejected.add(skill);
-            confirmed.delete(skill);
-          });
-        }
-
-        if (params.add_skills) {
-          params.add_skills.forEach(skill => {
-            confirmed.add(skill);
-            rejected.delete(skill);
-          });
-        }
-
-        // Generate the new total skills array
-        // 1. Start with existing basic skills that haven't been rejected
-        let finalSkills = currentSkills.filter((s: any) => {
-          const name = typeof s === 'string' ? s : s.name;
-          return !rejected.has(name);
-        });
-
-        // 2. Add any globally confirmed skills if they aren't already there
-        confirmed.forEach(skill => {
-          const exists = finalSkills.find((s: any) => (typeof s === 'string' ? s : s.name) === skill);
-          if (!exists) {
-            finalSkills.push({ name: skill, level: 'intermediate' }); // Mock Skill object format
-          }
-        });
-
-        profileRepo.update(profile.id, {
-          skills: finalSkills,
-          user_confirmed_skills: Array.from(confirmed),
-          user_rejected_skills: Array.from(rejected),
-        });
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              message: '기술 스택이 성공적으로 교정되었습니다.',
-              updated_skills: finalSkills.map((s: any) => typeof s === 'string' ? s : s.name),
-              confirmed_skills: Array.from(confirmed),
-              rejected_skills: Array.from(rejected)
-            }, null, 2)
-          }]
-        };
+        const result = profileService.updateSkills(params);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
         return {
           content: [{ type: 'text' as const, text: `수정 실패: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.tool(
@@ -287,40 +56,17 @@ export function registerProfileTools(server: McpServer): void {
       profile_id: z.string().optional().describe('수정할 프로필 ID (없으면 가장 최근 프로필)'),
       total_experience_months: z.number().describe('총 경력 (개월 수 단위, 예: 3년 8개월 -> 44)'),
     },
-    async (params) => {
+    async params => {
       try {
-        let profile;
-        if (params.profile_id) profile = profileRepo.findById(params.profile_id);
-        else profile = profileRepo.findAll()[0] || null;
-
-        if (!profile) return { content: [{ type: 'text' as const, text: '수정할 프로필이 없습니다.' }], isError: true };
-
-        const months = params.total_experience_months;
-        const years = Number((months / 12).toFixed(2));
-
-        profileRepo.update(profile.id, {
-          total_experience_months: months,
-          total_experience_years: years,
-        });
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              message: '경력 기간이 성공적으로 교정되었습니다.',
-              total_experience_months: months,
-              total_experience_years: years,
-              formatted: `${Math.floor(months / 12)}년 ${months % 12}개월`,
-            }, null, 2)
-          }]
-        };
+        const result = profileService.updateExperience(params);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
         return {
           content: [{ type: 'text' as const, text: `수정 실패: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.tool(
@@ -329,22 +75,15 @@ export function registerProfileTools(server: McpServer): void {
     {},
     async () => {
       try {
-        const allProfiles = profileRepo.findAll();
-        const history = allProfiles.map(p => ({
-          id: p.id,
-          updated_at: p.updated_at,
-          name: p.name,
-          total_experience_months: p.total_experience_months,
-          skills_count: p.skills?.length || 0,
-        }));
-
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ history }, null, 2) }]
-        };
+        const result = profileService.listVersions();
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
-        return { content: [{ type: 'text' as const, text: `조회 실패: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+        return {
+          content: [{ type: 'text' as const, text: `조회 실패: ${error instanceof Error ? error.message : String(error)}` }],
+          isError: true,
+        };
       }
-    }
+    },
   );
 
   server.tool(
@@ -353,28 +92,17 @@ export function registerProfileTools(server: McpServer): void {
     {
       target_profile_id: z.string().describe('profile_list_versions에서 찾은 복구하고 싶은 과거 프로필의 ID'),
     },
-    async (params) => {
+    async params => {
       try {
-        const targetProfile = profileRepo.findById(params.target_profile_id);
-        if (!targetProfile) return { content: [{ type: 'text' as const, text: '해당 ID의 프로필을 찾을 수 없습니다.' }], isError: true };
-
-        // SQLite상에서 최신 버전으로 취급되도록 현재 시간(updated_at)을 갱신하여 인플레이스 업데이트합니다.
-        profileRepo.update(targetProfile.id, {});
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              message: '성공적으로 롤백되어 마스터 프로필이 복구되었습니다.',
-              rolled_back_to_id: targetProfile.id,
-              restored_time: new Date().toISOString()
-            }, null, 2)
-          }]
-        };
+        const result = profileService.rollbackVersion(params);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
-        return { content: [{ type: 'text' as const, text: `롤백 실패: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+        return {
+          content: [{ type: 'text' as const, text: `롤백 실패: ${error instanceof Error ? error.message : String(error)}` }],
+          isError: true,
+        };
       }
-    }
+    },
   );
 
   server.tool(
@@ -383,39 +111,17 @@ export function registerProfileTools(server: McpServer): void {
     {
       profile_id: z.string().optional().describe('수정할 프로필 ID (없으면 가장 최근 프로필)'),
     },
-    async (params) => {
+    async params => {
       try {
-        let profile;
-        if (params.profile_id) profile = profileRepo.findById(params.profile_id);
-        else profile = profileRepo.findAll()[0] || null;
-
-        if (!profile) return { content: [{ type: 'text' as const, text: '수정할 프로필이 없습니다.' }], isError: true };
-
-        const currentSkills = profile.skills || [];
-        const confirmed = new Set(profile.user_confirmed_skills || []);
-        
-        currentSkills.forEach((s: any) => {
-           const name = typeof s === 'string' ? s : s.name;
-           confirmed.add(name);
-        });
-
-        profileRepo.update(profile.id, {
-          user_confirmed_skills: Array.from(confirmed),
-        });
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              message: '자동 추출되었던 스킬들이 모두 수동 확정계층(user_confirmed)으로 복사/저장되었습니다.',
-              total_confirmed_skills: Array.from(confirmed),
-            }, null, 2)
-          }]
-        };
+        const result = profileService.confirmSkills(params);
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
-        return { content: [{ type: 'text' as const, text: `작업 실패: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+        return {
+          content: [{ type: 'text' as const, text: `작업 실패: ${error instanceof Error ? error.message : String(error)}` }],
+          isError: true,
+        };
       }
-    }
+    },
   );
 
   server.tool(
@@ -424,17 +130,10 @@ export function registerProfileTools(server: McpServer): void {
     {
       profile_id: z.string().optional().describe('프로필 ID (없으면 가장 최근 프로필)'),
     },
-    async (params) => {
+    async params => {
       try {
-        let profile;
-        if (params.profile_id) {
-          profile = profileRepo.findById(params.profile_id);
-        } else {
-          const all = profileRepo.findAll();
-          profile = all[0] || null;
-        }
-
-        if (!profile) {
+        const result = profileService.getProfile(params);
+        if (!result) {
           return {
             content: [{
               type: 'text' as const,
@@ -443,42 +142,13 @@ export function registerProfileTools(server: McpServer): void {
           };
         }
 
-        const layeredResponse = {
-          id: profile.id,
-          last_updated: profile.updated_at,
-          layer_user_confirmed: {
-            total_experience_years: profile.total_experience_years,
-            total_experience_months: profile.total_experience_months,
-            user_confirmed_skills: profile.user_confirmed_skills,
-            user_rejected_skills: profile.user_rejected_skills,
-          },
-          layer_parsed_structured: {
-            name: profile.name,
-            email: profile.email,
-            phone: profile.phone,
-            job_category: profile.job_category,
-            skills_extracted: profile.skills,
-            projects: profile.projects,
-            domains: profile.domains,
-            education: profile.education,
-            certifications: profile.certifications,
-          },
-          layer_raw_source: {
-            raw_resume_text: profile.raw_resume_text,
-            raw_career_text: profile.raw_career_text,
-            raw_portfolio_text: profile.raw_portfolio_text,
-          }
-        };
-
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(layeredResponse, null, 2) }],
-        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
         return {
           content: [{ type: 'text' as const, text: `조회 실패: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,
         };
       }
-    }
+    },
   );
 }
