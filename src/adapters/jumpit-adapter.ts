@@ -10,36 +10,6 @@ import type { JobPosting, JobSearchParams, JobCategory } from '../types/job.js';
 import { normalizeJobText } from '../core/job-normalizer.js';
 import { generateId } from '../core/utils.js';
 
-// 점핏 기술 태그 ID 매핑
-const JUMPIT_TECH_TAG: Record<string, number> = {
-  'java': 1,
-  'javascript': 2,
-  'typescript': 3,
-  'python': 4,
-  'kotlin': 5,
-  'swift': 6,
-  'go': 7,
-  'rust': 8,
-  'c++': 9,
-  'c#': 10,
-  'react': 11,
-  'vue': 12,
-  'angular': 13,
-  'next.js': 14,
-  'spring': 15,
-  'spring boot': 16,
-  'node.js': 17,
-  'django': 18,
-  'fastapi': 19,
-  'aws': 20,
-  'docker': 21,
-  'kubernetes': 22,
-  'mysql': 23,
-  'postgresql': 24,
-  'mongodb': 25,
-  'redis': 26,
-};
-
 // 점핏 직무 카테고리
 const JUMPIT_JOB_CATEGORY: Record<string, number> = {
   backend: 1,
@@ -64,27 +34,21 @@ export class JumpitAdapter implements SourceAdapter {
   async search(params: JobSearchParams): Promise<JobPosting[]> {
     try {
       const limit = params.limit || 20;
+      const candidateSize = Math.min(Math.max(limit * 5, 20), 100);
 
       // 점핏 API 호출
       const url = new URL(`${this.baseUrl}/positions`);
       url.searchParams.set('page', '1');
-      url.searchParams.set('size', limit.toString());
+      url.searchParams.set('size', candidateSize.toString());
       url.searchParams.set('sort', 'relation');
+      if (params.keywords.length > 0) {
+        url.searchParams.set('keyword', params.keywords.join(' '));
+      }
 
       // 직무 카테고리
       if (params.job_category) {
         const catId = JUMPIT_JOB_CATEGORY[params.job_category];
         if (catId) url.searchParams.set('jobCategory', catId.toString());
-      }
-
-      // 기술 태그로 검색
-      const techTagIds: number[] = [];
-      for (const keyword of params.keywords) {
-        const tagId = JUMPIT_TECH_TAG[keyword.toLowerCase()];
-        if (tagId) techTagIds.push(tagId);
-      }
-      if (techTagIds.length > 0) {
-        url.searchParams.set('techStack', techTagIds.join(','));
       }
 
       // 경력
@@ -112,8 +76,17 @@ export class JumpitAdapter implements SourceAdapter {
 
       const data = await response.json() as JumpitListResponse;
       const items = data.result?.positions || data.data || [];
+      const jobs: JobPosting[] = [];
 
-      return items.slice(0, limit).map(item => this.toJobPosting(item));
+      for (const item of items) {
+        const job = this.toJobPosting(item);
+        if (!this.matchesSearch(job, params)) continue;
+
+        jobs.push(job);
+        if (jobs.length >= limit) break;
+      }
+
+      return jobs;
     } catch (error) {
       console.error('점핏 검색 실패:', error);
       return this.fallbackWebSearch(params);
@@ -221,18 +194,25 @@ export class JumpitAdapter implements SourceAdapter {
     const techNames = techStacks.map((t: any) =>
       typeof t === 'string' ? t : t.name || t.stack || ''
     ).filter(Boolean);
+    const location = item.locations?.join(', ')
+      || item.workingPlaces?.map(place => place.address).filter(Boolean).join(', ')
+      || item.address
+      || item.location
+      || '';
+    const title = stripHtml(item.title || item.position || '');
+    const company = stripHtml(item.companyName || item.company?.name || '');
 
     return {
       id: generateId('jp'),
       source: 'jumpit',
       source_id: (item.id || '').toString(),
-      company_name: item.companyName || item.company?.name || '',
-      job_title: item.title || item.position || '',
-      job_category: mapJumpitCategory(item.jobCategory),
+      company_name: company,
+      job_title: title,
+      job_category: mapJumpitCategory(item.jobCategory || item.jobCategories?.map(cat => cat.name).join(' ')),
       experience_min: item.minCareer ?? null,
       experience_max: item.maxCareer ?? null,
       employment_type: item.employmentType || '정규직',
-      location: item.locations?.join(', ') || item.address || '',
+      location,
       salary_text: item.salary || null,
       required_skills: techNames,
       preferred_skills: [],
@@ -252,46 +232,96 @@ export class JumpitAdapter implements SourceAdapter {
     ).filter(Boolean);
 
     const rawText = [
-      item.mainTask || item.qualifications,
-      item.preferredExperience,
-      item.benefits,
+      buildSection('주요업무', item.responsibility || item.mainTask),
+      buildSection('자격요건', item.qualifications),
+      buildSection('우대사항', item.preferredRequirements || item.preferredExperience),
+      buildSection('복리후생', item.welfares || item.benefits),
+      buildSection('전형절차', item.recruitProcess),
     ].filter(Boolean).join('\n\n');
 
     const normalized = normalizeJobText(rawText, item.title || '');
+    const location = item.locations?.join(', ')
+      || item.workingPlaces?.map(place => place.address).filter(Boolean).join(', ')
+      || item.address
+      || item.location
+      || '';
 
     return {
       id: generateId('jp'),
       source: 'jumpit',
       source_id: (item.id || '').toString(),
-      company_name: item.companyName || item.company?.name || '',
-      job_title: item.title || '',
-      job_category: normalized.job_category,
+      company_name: stripHtml(item.companyName || item.company?.name || ''),
+      job_title: stripHtml(item.title || ''),
+      job_category: mapJumpitCategory(item.jobCategory || item.jobCategories?.map(cat => cat.name).join(' ')) || normalized.job_category,
       experience_min: item.minCareer ?? normalized.experience_min,
       experience_max: item.maxCareer ?? normalized.experience_max,
       employment_type: item.employmentType || '정규직',
-      location: item.locations?.join(', ') || item.address || '',
+      location,
       salary_text: item.salary || null,
       required_skills: techNames.length > 0 ? techNames : normalized.required_skills,
       preferred_skills: normalized.preferred_skills,
       responsibilities: normalized.responsibilities.length > 0
         ? normalized.responsibilities
-        : extractLines(item.mainTask),
+        : extractLines(item.responsibility || item.mainTask),
       qualifications: normalized.qualifications.length > 0
         ? normalized.qualifications
         : extractLines(item.qualifications),
       preferences: normalized.preferences.length > 0
         ? normalized.preferences
-        : extractLines(item.preferredExperience),
+        : extractLines(item.preferredRequirements || item.preferredExperience),
       deadline: item.closedAt || null,
       url: `https://www.jumpit.co.kr/position/${item.id}`,
       raw_text: rawText,
       fetched_at: new Date().toISOString(),
     };
   }
+
+  private matchesSearch(job: JobPosting, params: JobSearchParams): boolean {
+    if (params.keywords.length > 0) {
+      const matchText = [
+        job.job_title,
+        job.company_name,
+        job.location,
+        ...job.required_skills,
+      ].join(' ').toLowerCase();
+      if (!params.keywords.some(keyword => matchText.includes(keyword.toLowerCase()))) {
+        return false;
+      }
+    }
+
+    if (params.location && job.location && !job.location.includes(params.location)) {
+      return false;
+    }
+
+    if (params.experience_min !== undefined && job.experience_max !== null && job.experience_max < params.experience_min) {
+      return false;
+    }
+
+    if (params.experience_max !== undefined && job.experience_min !== null && job.experience_min > params.experience_max) {
+      return false;
+    }
+
+    if (params.job_category && job.job_category !== params.job_category && job.job_category !== 'other') {
+      return false;
+    }
+
+    return true;
+  }
 }
 
 function mapJumpitCategory(cat?: number | string): JobCategory {
   if (!cat) return 'other';
+  if (typeof cat === 'string') {
+    const text = cat.toLowerCase();
+    if (text.includes('백엔드') || text.includes('서버')) return 'backend';
+    if (text.includes('프론트')) return 'frontend';
+    if (text.includes('풀스택')) return 'fullstack';
+    if (text.includes('안드로이드') || text.includes('ios') || text.includes('모바일')) return 'mobile';
+    if (text.includes('데이터')) return 'data';
+    if (text.includes('머신러닝') || text.includes('ai')) return 'ai_ml';
+    if (text.includes('devops') || text.includes('sre') || text.includes('인프라') || text.includes('클라우드')) return 'devops';
+    if (text.includes('보안')) return 'security';
+  }
   const map: Record<string, JobCategory> = {
     '1': 'backend', '2': 'frontend', '3': 'fullstack', '4': 'mobile',
     '6': 'data', '7': 'ai_ml', '8': 'devops', '12': 'security',
@@ -312,6 +342,10 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
 }
 
+function buildSection(label: string, value?: string): string {
+  return value ? `${label}\n${value}` : '';
+}
+
 // --- 점핏 API 응답 타입 ---
 
 interface JumpitPosition {
@@ -320,13 +354,16 @@ interface JumpitPosition {
   position?: string;
   companyName?: string;
   company?: { name: string };
-  jobCategory?: number;
+  jobCategory?: number | string;
+  jobCategories?: Array<{ id?: number; name: string }>;
   techStacks?: any[];
   skillTags?: any[];
   minCareer?: number;
   maxCareer?: number;
   employmentType?: string;
   locations?: string[];
+  location?: string;
+  workingPlaces?: Array<{ address?: string; domestic?: boolean }>;
   address?: string;
   salary?: string;
   closedAt?: string;
@@ -334,9 +371,13 @@ interface JumpitPosition {
 
 interface JumpitPositionDetail extends JumpitPosition {
   mainTask?: string;
+  responsibility?: string;
   qualifications?: string;
   preferredExperience?: string;
+  preferredRequirements?: string;
   benefits?: string;
+  welfares?: string;
+  recruitProcess?: string;
 }
 
 interface JumpitListResponse {

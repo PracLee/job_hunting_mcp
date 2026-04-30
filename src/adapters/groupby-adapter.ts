@@ -37,42 +37,28 @@ export class GroupbyAdapter implements SourceAdapter {
       const limit = params.limit || 20;
       const jobs: JobPosting[] = [];
 
-      // 2) 각 position 상세 페이지에서 __NEXT_DATA__ 파싱
-      // 한 번에 너무 많이 요청하지 않도록 제한
-      const candidateIds = positionIds.slice(0, Math.min(positionIds.length, limit * 3));
+      const candidateCount = params.keywords.length > 0
+        ? Math.min(Math.max(limit * 20, 120), 240)
+        : Math.min(Math.max(limit * 6, 30), 60);
+      const candidateIds = positionIds.slice(0, Math.min(positionIds.length, candidateCount));
+      const batchSize = params.keywords.length > 0 ? 8 : 5;
 
-      for (const posId of candidateIds) {
-        if (jobs.length >= limit) break;
-
-        try {
-          const job = await this.fetchPositionDetail(posId);
-          if (!job) continue;
-
-          // 키워드 필터링
-          if (params.keywords.length > 0) {
-            const matchText = `${job.job_title} ${job.company_name} ${job.required_skills.join(' ')} ${job.raw_text}`.toLowerCase();
-            const matched = params.keywords.some(k => matchText.includes(k.toLowerCase()));
-            if (!matched) continue;
+      for (let index = 0; index < candidateIds.length && jobs.length < limit; index += batchSize) {
+        const batch = candidateIds.slice(index, index + batchSize);
+        const results = await Promise.all(batch.map(async posId => {
+          try {
+            return await this.fetchPositionDetail(posId);
+          } catch {
+            return null;
           }
+        }));
 
-          // 경력 필터링
-          if (params.experience_min !== undefined && job.experience_max !== null && job.experience_max < params.experience_min) continue;
-          if (params.experience_max !== undefined && job.experience_min !== null && job.experience_min > params.experience_max) continue;
-
-          // 카테고리 필터링
-          if (params.job_category && job.job_category !== params.job_category && job.job_category !== 'other') continue;
-
-          // 지역 필터링
-          if (params.location && job.location && !job.location.includes(params.location)) continue;
+        for (const job of results) {
+          if (!job || !this.matchesSearch(job, params)) continue;
 
           jobs.push(job);
-        } catch {
-          // 개별 공고 파싱 실패 시 무시하고 계속
-          continue;
+          if (jobs.length >= limit) break;
         }
-
-        // rate limiting: 요청 간 200ms 딜레이
-        await new Promise(r => setTimeout(r, 200));
       }
 
       return jobs;
@@ -105,17 +91,21 @@ export class GroupbyAdapter implements SourceAdapter {
 
       const xml = await response.text();
 
-      // <loc>https://groupby.kr/positions/1234</loc> 패턴 추출
-      const positionIds: string[] = [];
-      const regex = /groupby\.kr\/positions\/(\d+)/g;
+      const positions: Array<{ id: string; lastmod: string | null }> = [];
+      const regex = /<url>\s*<loc>https:\/\/groupby\.kr\/positions\/(\d+)<\/loc>(?:\s*<lastmod>([^<]+)<\/lastmod>)?/g;
       let match;
       while ((match = regex.exec(xml)) !== null) {
-        positionIds.push(match[1]);
+        positions.push({ id: match[1], lastmod: match[2] || null });
       }
 
-      // 최신순 정렬 (ID가 클수록 최신)
-      positionIds.sort((a, b) => parseInt(b) - parseInt(a));
-      return positionIds;
+      positions.sort((left, right) => {
+        const leftTime = left.lastmod ? Date.parse(left.lastmod) : 0;
+        const rightTime = right.lastmod ? Date.parse(right.lastmod) : 0;
+        if (rightTime !== leftTime) return rightTime - leftTime;
+        return parseInt(right.id, 10) - parseInt(left.id, 10);
+      });
+
+      return Array.from(new Set(positions.map(position => position.id)));
     } catch {
       return [];
     }
@@ -168,17 +158,19 @@ export class GroupbyAdapter implements SourceAdapter {
       // 방법 2: pageProps.fallbackDataRaw 파싱
       if (nextData?.props?.pageProps?.fallbackDataRaw) {
         const raw = nextData.props.pageProps.fallbackDataRaw;
+        if (this.isPosition(raw)) return raw;
+
         // fallbackDataRaw는 [[key, value]] 형태일 수 있음
         if (Array.isArray(raw)) {
           for (const [, value] of raw) {
             const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-            if (parsed?.id && parsed?.name) return parsed;
+            if (this.isPosition(parsed)) return parsed;
           }
         } else if (typeof raw === 'object') {
           // 중첩 객체에서 position 데이터 찾기
           for (const key of Object.keys(raw)) {
             const val = raw[key];
-            if (val?.id && val?.name) return val;
+            if (this.isPosition(val)) return val;
           }
         }
       }
@@ -188,7 +180,7 @@ export class GroupbyAdapter implements SourceAdapter {
       if (dehydrated?.queries) {
         for (const query of dehydrated.queries) {
           const data = query?.state?.data;
-          if (data?.id && data?.name) return data;
+          if (this.isPosition(data)) return data;
         }
       }
 
@@ -204,13 +196,14 @@ export class GroupbyAdapter implements SourceAdapter {
   private positionToJob(pos: GroupbyPosition, positionId: string): JobPosting {
     // 주요 텍스트 결합
     const rawText = [
-      pos.task,
-      pos.qualification,
-      pos.preferred,
-      pos.hiringProcess,
+      buildSection('주요업무', pos.task),
+      buildSection('자격요건', pos.qualification),
+      buildSection('우대사항', pos.preferred),
+      buildSection('채용절차', pos.hiringProcess),
     ].filter(Boolean).map(t => stripHtml(t!)).join('\n\n');
 
-    const normalized = normalizeJobText(rawText, pos.name || '');
+    const title = (pos.name || '').trim();
+    const normalized = normalizeJobText(rawText, title);
 
     // 기술스택 추출
     const techStacks = pos.techStacks?.map((t: any) => typeof t === 'string' ? t : t.name).filter(Boolean) || [];
@@ -225,7 +218,7 @@ export class GroupbyAdapter implements SourceAdapter {
     const category = this.detectCategory(posTypeNames, pos.name || '');
 
     // 위치
-    const location = pos.address || pos.location || normalized.location;
+    const location = pos.address || extractGroupbyLocation(pos.location) || normalized.location;
 
     // 회사 정보
     const companyName = pos.startup?.name || '';
@@ -235,7 +228,7 @@ export class GroupbyAdapter implements SourceAdapter {
       source: 'groupby',
       source_id: positionId,
       company_name: companyName,
-      job_title: pos.name || '',
+      job_title: title,
       job_category: category,
       experience_min: expMin,
       experience_max: expMax,
@@ -273,6 +266,44 @@ export class GroupbyAdapter implements SourceAdapter {
     }
     return 'other';
   }
+
+  private matchesSearch(job: JobPosting, params: JobSearchParams): boolean {
+    if (params.keywords.length > 0) {
+      const matchText = `${job.job_title} ${job.company_name} ${job.required_skills.join(' ')} ${job.raw_text}`.toLowerCase();
+      const matched = params.keywords.some(keyword => matchText.includes(keyword.toLowerCase()));
+      if (!matched) return false;
+    }
+
+    if (params.experience_min !== undefined && job.experience_max !== null && job.experience_max < params.experience_min) {
+      return false;
+    }
+
+    if (params.experience_max !== undefined && job.experience_min !== null && job.experience_min > params.experience_max) {
+      return false;
+    }
+
+    if (params.job_category && job.job_category !== params.job_category && job.job_category !== 'other') {
+      return false;
+    }
+
+    if (params.location && job.location && !job.location.includes(params.location)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private isPosition(value: unknown): value is GroupbyPosition {
+    if (!value || typeof value !== 'object') return false;
+    const candidate = value as GroupbyPosition;
+    return Boolean(candidate.id && candidate.name && (
+      candidate.startup?.name
+      || candidate.task
+      || candidate.qualification
+      || candidate.positionTypes
+      || candidate.techStacks
+    ));
+  }
 }
 
 // --- 유틸 ---
@@ -298,6 +329,15 @@ function extractBulletList(text: string): string[] {
     .filter(l => l.length > 3);
 }
 
+function buildSection(label: string, value?: string): string {
+  return value ? `${label}\n${value}` : '';
+}
+
+function extractGroupbyLocation(location?: string | { id?: number; name?: string }): string {
+  if (!location) return '';
+  return typeof location === 'string' ? location : location.name || '';
+}
+
 // --- 그룹바이 응답 타입 ---
 
 interface GroupbyPosition {
@@ -308,7 +348,7 @@ interface GroupbyPosition {
   techStacks?: Array<{ id: number; name: string } | string>;
   experienceRange?: { min: number; max: number };
   remoteWorkPreference?: string;
-  location?: string;
+  location?: string | { id?: number; name?: string };
   address?: string;
   task?: string;
   qualification?: string;
