@@ -10,6 +10,7 @@ import type { SourceAdapter } from './base-adapter.js';
 import type { JobPosting, JobSearchParams, JobCategory } from '../types/job.js';
 import { normalizeJobText } from '../core/job-normalizer.js';
 import { generateId } from '../core/utils.js';
+import * as cheerio from 'cheerio';
 
 // 잡코리아 직무 코드 매핑
 const JOBKOREA_DUTY_CODE: Record<string, string> = {
@@ -36,7 +37,6 @@ export class JobkoreaAdapter implements SourceAdapter {
   async search(params: JobSearchParams): Promise<JobPosting[]> {
     try {
       const query = params.keywords.join(' ');
-      const url = new URL(`${this.baseUrl}/?stext=${encodeURIComponent(query)}`);
 
       // 잡코리아 검색 API 엔드포인트
       const apiUrl = `https://www.jobkorea.co.kr/Search/?stext=${encodeURIComponent(query)}&tabType=recruit&Page_No=1&Ord=BestMatch`;
@@ -88,43 +88,35 @@ export class JobkoreaAdapter implements SourceAdapter {
   }
 
   private parseSearchResults(html: string, params: JobSearchParams): JobPosting[] {
+    const $ = cheerio.load(html);
     const jobs: JobPosting[] = [];
     const limit = params.limit || 20;
 
-    // 잡코리아 검색 결과 HTML 파싱
-    // <div class="post"> ... </div> 구조
-    const postRegex = /<div\s+class="post"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi;
-    const titleRegex = /<a[^>]*class="title"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i;
-    const companyRegex = /<a[^>]*class="name"[^>]*>([\s\S]*?)<\/a>/i;
-    const optionRegex = /<span\s+class="opt"[^>]*>([\s\S]*?)<\/span>/gi;
+    $('[data-sentry-component="CardJob"]').each((_, element) => {
+      if (jobs.length >= limit) return false;
 
-    let match;
-    while ((match = postRegex.exec(html)) !== null && jobs.length < limit) {
-      const block = match[1];
+      const card = $(element);
+      const titleLink = card.find('[data-sentry-component="Title"]').first();
+      const href = titleLink.attr('href') || '';
+      const sourceId = href.match(/GI_Read\/(\d+)/)?.[1];
+      if (!href || !sourceId) return;
 
-      const titleMatch = titleRegex.exec(block);
-      const companyMatch = companyRegex.exec(block);
+      const title = cleanText(titleLink.text());
+      if (!title) return;
 
-      if (!titleMatch) continue;
-
-      const href = titleMatch[1];
-      const title = stripHtml(titleMatch[2]).trim();
-      const company = companyMatch ? stripHtml(companyMatch[1]).trim() : '';
-
-      // 옵션(경력/학력/지역/고용형태) 추출
-      const options: string[] = [];
-      let optMatch;
-      while ((optMatch = optionRegex.exec(block)) !== null) {
-        options.push(stripHtml(optMatch[1]).trim());
-      }
-
-      const location = options.find(o => /(서울|경기|부산|대구|인천|광주|대전|울산|세종|판교|성남)/.test(o)) || '';
-      const expText = options.find(o => /경력|신입/.test(o)) || '';
-      const empType = options.find(o => /정규직|계약직|인턴|파견직/.test(o)) || '정규직';
-
-      const expMin = expText.match(/(\d+)년/)?.[1] ? parseInt(expText.match(/(\d+)년/)![1]) : null;
-
-      const sourceId = href.match(/\/(\d+)/)?.[1] || Date.now().toString();
+      const company = cleanText(
+        card.find('[data-sentry-component="CompanyName"]').first().text()
+        || card.find('span.mb-5 a span').first().text()
+      );
+      const cardText = cleanText(card.text());
+      const chips = card.find('[data-sentry-component="GrayChip"]')
+        .toArray()
+        .map(chip => cleanText($(chip).text()))
+        .filter(Boolean);
+      const normalized = normalizeJobText([title, company, ...chips, cardText].join('\n'), title);
+      const location = chips.find(text => /(서울|경기|부산|대구|인천|광주|대전|울산|세종|판교|성남)/.test(text))
+        || normalized.location;
+      const expMin = extractExperience(cardText) ?? normalized.experience_min;
 
       jobs.push({
         id: generateId('jp'),
@@ -132,61 +124,79 @@ export class JobkoreaAdapter implements SourceAdapter {
         source_id: sourceId,
         company_name: company,
         job_title: title,
-        job_category: params.job_category || 'other',
+        job_category: params.job_category || normalized.job_category,
         experience_min: expMin,
         experience_max: null,
-        employment_type: empType,
+        employment_type: normalized.employment_type,
         location,
         salary_text: null,
-        required_skills: [],
+        required_skills: normalized.required_skills,
         preferred_skills: [],
         responsibilities: [],
         qualifications: [],
         preferences: [],
         deadline: null,
-        url: href.startsWith('http') ? href : `https://www.jobkorea.co.kr${href}`,
+        url: normalizeUrl(href),
         raw_text: '',
         fetched_at: new Date().toISOString(),
       });
-    }
+    });
 
     return jobs;
   }
 
   private parseDetailPage(html: string, url: string): JobPosting | null {
-    // 상세 페이지 파싱
-    const titleMatch = html.match(/<h3[^>]*class="hd_3"[^>]*>([\s\S]*?)<\/h3>/i);
-    const companyMatch = html.match(/<a[^>]*class="coName"[^>]*>([\s\S]*?)<\/a>/i);
-
-    // 상세 내용 영역
-    const detailMatch = html.match(/<div[^>]*class="tbRow[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi);
-    const rawText = detailMatch ? detailMatch.map(d => stripHtml(d)).join('\n\n') : '';
-
-    const title = titleMatch ? stripHtml(titleMatch[1]).trim() : '';
-    const company = companyMatch ? stripHtml(companyMatch[1]).trim() : '';
+    const $ = cheerio.load(html);
+    const posting = extractJobPostingSchema($);
+    const title = cleanText(
+      posting?.title
+      || $('meta[property="og:title"]').attr('content')?.replace(/\s*\|\s*잡코리아\s*$/, '')
+      || ''
+    );
+    const company = cleanText(posting?.hiringOrganization?.name || '');
 
     if (!title) return null;
 
+    const recruitmentText = cleanText($('[data-sentry-component="RecruitmentGuidelines"]').text());
+    const qualificationText = cleanText($('[data-sentry-component="Qualification"]').text());
+    const benefitText = cleanText($('[data-sentry-component="BenefitCard"]').text());
+    const descriptionText = cleanText(posting?.description || '');
+    const rawText = [
+      buildSection('공고 요약', descriptionText),
+      buildSection('모집요강', recruitmentText),
+      buildSection('지원자격', qualificationText),
+      buildSection('복리후생', benefitText),
+    ].filter(Boolean).join('\n\n');
     const normalized = normalizeJobText(rawText, title);
+    const location = cleanText(
+      posting?.jobLocation?.address?.streetAddress
+      || normalized.location
+      || ''
+    );
+    const experienceMin = extractExperience(qualificationText) ?? normalized.experience_min;
 
     return {
       id: generateId('jp'),
       source: 'jobkorea',
-      source_id: url.match(/\/(\d+)/)?.[1] || '',
+      source_id: posting?.identifier?.value || url.match(/GI_Read\/(\d+)/)?.[1] || '',
       company_name: company,
       job_title: title,
       job_category: normalized.job_category,
-      experience_min: normalized.experience_min,
+      experience_min: experienceMin,
       experience_max: normalized.experience_max,
-      employment_type: normalized.employment_type,
-      location: normalized.location,
+      employment_type: mapEmploymentType(posting?.employmentType, normalized.employment_type),
+      location,
       salary_text: normalized.salary_text,
       required_skills: normalized.required_skills,
       preferred_skills: normalized.preferred_skills,
-      responsibilities: normalized.responsibilities,
-      qualifications: normalized.qualifications,
+      responsibilities: normalized.responsibilities.length > 0
+        ? normalized.responsibilities
+        : extractLines(recruitmentText),
+      qualifications: normalized.qualifications.length > 0
+        ? normalized.qualifications
+        : extractLines(qualificationText),
       preferences: normalized.preferences,
-      deadline: normalized.deadline,
+      deadline: posting?.validThrough || normalized.deadline,
       url,
       raw_text: rawText,
       fetched_at: new Date().toISOString(),
@@ -196,4 +206,87 @@ export class JobkoreaAdapter implements SourceAdapter {
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
+}
+
+function cleanText(text: string): string {
+  return stripHtml(text)
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url, 'https://www.jobkorea.co.kr');
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+function extractExperience(text: string): number | null {
+  if (/신입/.test(text)) return 0;
+  const value = text.match(/경력\s*\(?\s*(\d+)년/)?.[1] || text.match(/(\d+)년[↑이상]*/)?.[1];
+  return value ? parseInt(value, 10) : null;
+}
+
+function extractLines(text: string): string[] {
+  return text
+    .split(/(?<=다\.)\s+|(?<=요\.)\s+|(?<=니다\.)\s+|\n+/)
+    .map(line => line.trim().replace(/^[-•·▪▸►◦]\s*/, ''))
+    .filter(line => line.length > 3);
+}
+
+function buildSection(label: string, value: string): string {
+  return value ? `${label}\n${value}` : '';
+}
+
+function mapEmploymentType(schemaType?: string | string[], fallback = '정규직'): string {
+  const normalized = Array.isArray(schemaType)
+    ? schemaType.join(' ').toUpperCase()
+    : (schemaType || '').toUpperCase();
+  if (normalized.includes('CONTRACT')) return '계약직';
+  if (normalized.includes('PART_TIME')) return '아르바이트';
+  if (normalized.includes('INTERN')) return '인턴';
+  if (normalized.includes('TEMPORARY')) return '계약직';
+  if (normalized.includes('FULL_TIME')) return '정규직';
+  return fallback;
+}
+
+function extractJobPostingSchema($: cheerio.CheerioAPI): JobPostingSchema | null {
+  const scripts = $('script[type="application/ld+json"]').toArray();
+
+  for (const script of scripts) {
+    const raw = $(script).html();
+    if (!raw) continue;
+
+    try {
+      const parsed = JSON.parse(raw) as JobPostingSchema | JobPostingSchema[];
+      const candidates = Array.isArray(parsed) ? parsed : [parsed];
+      const jobPosting = candidates.find(item => item?.['@type'] === 'JobPosting');
+      if (jobPosting) return jobPosting;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+interface JobPostingSchema {
+  '@type'?: string;
+  title?: string;
+  description?: string;
+  validThrough?: string;
+  employmentType?: string | string[];
+  hiringOrganization?: {
+    name?: string;
+  };
+  jobLocation?: {
+    address?: {
+      streetAddress?: string;
+    };
+  };
+  identifier?: {
+    value?: string;
+  };
 }
