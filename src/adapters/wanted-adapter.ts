@@ -30,20 +30,20 @@ export class WantedAdapter implements SourceAdapter {
 
   async search(params: JobSearchParams): Promise<JobPosting[]> {
     try {
+      const limit = params.limit || 20;
+      const candidateLimit = Math.min(Math.max(limit * 5, 60), 100);
       const tagIds = params.job_category
         ? WANTED_TAG_MAP[params.job_category] || WANTED_TAG_MAP.other
-        : WANTED_TAG_MAP.other;
-
-      // 원티드 API 호출
-      const query = params.keywords.join(' ');
-      const limit = params.limit || 20;
+        : null;
 
       const url = new URL(`${this.baseUrl}/jobs`);
       url.searchParams.set('country', 'kr');
-      url.searchParams.set('tag_type_ids', tagIds.join(','));
+      if (tagIds && tagIds.length > 0) {
+        url.searchParams.set('tag_type_ids', tagIds.join(','));
+      }
       url.searchParams.set('locations', params.location === '서울' ? 'seoul.all' : 'all');
       url.searchParams.set('years', this.buildYearsParam(params.experience_min, params.experience_max));
-      url.searchParams.set('limit', limit.toString());
+      url.searchParams.set('limit', candidateLimit.toString());
       url.searchParams.set('offset', '0');
 
       const response = await fetch(url.toString(), {

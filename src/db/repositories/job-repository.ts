@@ -1,6 +1,7 @@
 import { getDb } from '../connection.js';
 import type { JobPosting, JobSearchParams, JobSource } from '../../types/index.js';
 import { generateId } from '../../core/utils.js';
+import { scoreJobSearchMatch } from '../../core/job-search.js';
 
 export class JobRepository {
   save(job: Omit<JobPosting, 'id'>): JobPosting {
@@ -64,14 +65,27 @@ export class JobRepository {
       values.push(...params.sources);
     }
 
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const limit = params.limit || 20;
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const rows = db.prepare(
-      `SELECT * FROM job_postings ${where} ORDER BY fetched_at DESC LIMIT ?`
-    ).all(...values, limit) as Record<string, unknown>[];
+      `SELECT * FROM job_postings ${where} ORDER BY fetched_at DESC`
+    ).all(...values) as Record<string, unknown>[];
 
-    return rows.map(row => this.rowToJob(row));
+    let jobs = rows.map(row => this.rowToJob(row));
+
+    if (params.keywords.length > 0) {
+      jobs = jobs
+        .map(job => ({ job, search: scoreJobSearchMatch(job, params.keywords) }))
+        .filter(item => item.search.matched)
+        .sort((left, right) => {
+          if (right.search.score !== left.search.score) return right.search.score - left.search.score;
+          return right.job.fetched_at.localeCompare(left.job.fetched_at);
+        })
+        .map(item => item.job);
+    }
+
+    return jobs.slice(0, limit);
   }
 
   private rowToJob(row: Record<string, unknown>): JobPosting {
