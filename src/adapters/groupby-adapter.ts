@@ -3,7 +3,7 @@
  * 스타트업 전문 채용 플랫폼 — Next.js SSR __NEXT_DATA__ 파싱
  */
 
-import type { SourceAdapter } from './base-adapter.js';
+import type { SourceAdapter, SourceSearchResult } from './base-adapter.js';
 import type { JobPosting, JobSearchParams, JobCategory } from '../types/job.js';
 import { normalizeJobText } from '../core/job-normalizer.js';
 import { generateId } from '../core/utils.js';
@@ -29,10 +29,16 @@ export class GroupbyAdapter implements SourceAdapter {
   }
 
   async search(params: JobSearchParams): Promise<JobPosting[]> {
+    return (await this.searchWithMeta(params)).jobs;
+  }
+
+  async searchWithMeta(params: JobSearchParams): Promise<SourceSearchResult> {
     try {
       // 1) server-sitemap.xml에서 position ID 목록 수집
       const positionIds = await this.fetchPositionIds();
-      if (positionIds.length === 0) return [];
+      if (positionIds.length === 0) {
+        return { jobs: [], warnings: ['파서 오류 - sitemap에서 공고 ID를 찾지 못했습니다.'] };
+      }
 
       const limit = params.limit || 20;
       const jobs: JobPosting[] = [];
@@ -61,10 +67,10 @@ export class GroupbyAdapter implements SourceAdapter {
         }
       }
 
-      return jobs;
+      return { jobs, warnings: [] };
     } catch (error) {
       console.error('그룹바이 검색 실패:', error);
-      return [];
+      return { jobs: [], warnings: [`파서 오류 - ${error instanceof Error ? error.message : String(error)}`] };
     }
   }
 

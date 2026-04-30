@@ -4,27 +4,69 @@ import { generateId } from '../../core/utils.js';
 import { scoreJobSearchMatch } from '../../core/job-search.js';
 
 export class JobRepository {
-  save(job: Omit<JobPosting, 'id'>): JobPosting {
+  save(job: Omit<JobPosting, 'id'> & Partial<Pick<JobPosting, 'id'>>): JobPosting {
     const db = getDb();
-    const id = generateId('jp');
+    const existing = job.source_id ? this.findBySourceId(job.source, job.source_id) : null;
+    const id = existing?.id || job.id || generateId('jp');
 
-    db.prepare(`
-      INSERT OR REPLACE INTO job_postings
-        (id, source, source_id, company_name, job_title, job_category,
-         experience_min, experience_max, employment_type, location, salary_text,
-         required_skills, preferred_skills, responsibilities, qualifications,
-         preferences, deadline, url, raw_text, fetched_at)
-      VALUES
-        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id, job.source, job.source_id, job.company_name, job.job_title, job.job_category,
-      job.experience_min, job.experience_max, job.employment_type, job.location, job.salary_text,
-      JSON.stringify(job.required_skills), JSON.stringify(job.preferred_skills),
-      JSON.stringify(job.responsibilities), JSON.stringify(job.qualifications),
-      JSON.stringify(job.preferences), job.deadline, job.url, job.raw_text, job.fetched_at
-    );
+    const payload: JobPosting = {
+      id,
+      source: job.source,
+      source_id: job.source_id,
+      company_name: job.company_name,
+      job_title: job.job_title,
+      job_category: job.job_category,
+      experience_min: job.experience_min,
+      experience_max: job.experience_max,
+      employment_type: job.employment_type,
+      location: job.location,
+      salary_text: job.salary_text,
+      required_skills: job.required_skills,
+      preferred_skills: job.preferred_skills,
+      responsibilities: job.responsibilities,
+      qualifications: job.qualifications,
+      preferences: job.preferences,
+      deadline: job.deadline,
+      url: job.url,
+      raw_text: job.raw_text,
+      fetched_at: job.fetched_at,
+    };
 
-    return { id, ...job };
+    if (existing) {
+      db.prepare(`
+        UPDATE job_postings SET
+          source = ?, source_id = ?, company_name = ?, job_title = ?, job_category = ?,
+          experience_min = ?, experience_max = ?, employment_type = ?, location = ?, salary_text = ?,
+          required_skills = ?, preferred_skills = ?, responsibilities = ?, qualifications = ?,
+          preferences = ?, deadline = ?, url = ?, raw_text = ?, fetched_at = ?
+        WHERE id = ?
+      `).run(
+        payload.source, payload.source_id, payload.company_name, payload.job_title, payload.job_category,
+        payload.experience_min, payload.experience_max, payload.employment_type, payload.location, payload.salary_text,
+        JSON.stringify(payload.required_skills), JSON.stringify(payload.preferred_skills),
+        JSON.stringify(payload.responsibilities), JSON.stringify(payload.qualifications),
+        JSON.stringify(payload.preferences), payload.deadline, payload.url, payload.raw_text, payload.fetched_at,
+        payload.id,
+      );
+    } else {
+      db.prepare(`
+        INSERT INTO job_postings
+          (id, source, source_id, company_name, job_title, job_category,
+           experience_min, experience_max, employment_type, location, salary_text,
+           required_skills, preferred_skills, responsibilities, qualifications,
+           preferences, deadline, url, raw_text, fetched_at)
+        VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        payload.id, payload.source, payload.source_id, payload.company_name, payload.job_title, payload.job_category,
+        payload.experience_min, payload.experience_max, payload.employment_type, payload.location, payload.salary_text,
+        JSON.stringify(payload.required_skills), JSON.stringify(payload.preferred_skills),
+        JSON.stringify(payload.responsibilities), JSON.stringify(payload.qualifications),
+        JSON.stringify(payload.preferences), payload.deadline, payload.url, payload.raw_text, payload.fetched_at,
+      );
+    }
+
+    return payload;
   }
 
   findById(id: string): JobPosting | null {

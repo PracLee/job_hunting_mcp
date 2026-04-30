@@ -22,6 +22,7 @@ export interface JobPosting {
 }
 
 export type JobSource = 'wanted' | 'saramin' | 'jobkorea' | 'jumpit' | 'groupby' | 'remember';
+export type JobSearchMode = 'online' | 'local' | 'both';
 
 export type JobCategory =
   | 'backend'
@@ -42,7 +43,10 @@ export interface JobSearchParams {
   job_category?: JobCategory;
   sources?: JobSource[];
   limit?: number;
+  auto_save?: boolean;
 }
+
+export type JobSourceResultCount = Partial<Record<JobSource, number>>;
 
 export interface JobSearchResult {
   total: number;
@@ -51,5 +55,8 @@ export interface JobSearchResult {
   search_meta: {
     query_time_ms: number;
     cached: boolean;
+    auto_saved: boolean;
+    search_mode: JobSearchMode;
+    sources_result_count: JobSourceResultCount;
   };
 }

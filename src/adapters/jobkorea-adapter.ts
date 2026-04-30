@@ -6,7 +6,7 @@
  * API 구조가 변경될 수 있으므로 에러 핸들링 강화
  */
 
-import type { SourceAdapter } from './base-adapter.js';
+import type { SourceAdapter, SourceSearchResult } from './base-adapter.js';
 import type { JobPosting, JobSearchParams, JobCategory } from '../types/job.js';
 import { normalizeJobText } from '../core/job-normalizer.js';
 import { generateId } from '../core/utils.js';
@@ -35,6 +35,10 @@ export class JobkoreaAdapter implements SourceAdapter {
   }
 
   async search(params: JobSearchParams): Promise<JobPosting[]> {
+    return (await this.searchWithMeta(params)).jobs;
+  }
+
+  async searchWithMeta(params: JobSearchParams): Promise<SourceSearchResult> {
     try {
       const query = params.keywords.join(' ');
 
@@ -51,14 +55,14 @@ export class JobkoreaAdapter implements SourceAdapter {
 
       if (!response.ok) {
         console.error(`잡코리아 검색 에러: ${response.status}`);
-        return [];
+        return { jobs: [], warnings: [`파서 오류 - 응답 상태 ${response.status}`] };
       }
 
       const html = await response.text();
-      return this.parseSearchResults(html, params);
+      return { jobs: this.parseSearchResults(html, params), warnings: [] };
     } catch (error) {
       console.error('잡코리아 검색 실패:', error);
-      return [];
+      return { jobs: [], warnings: [`파서 오류 - ${error instanceof Error ? error.message : String(error)}`] };
     }
   }
 
