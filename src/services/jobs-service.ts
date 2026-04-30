@@ -8,7 +8,7 @@ import { GroupbyAdapter } from '../adapters/groupby-adapter.js';
 import { RememberAdapter } from '../adapters/remember-adapter.js';
 import type { SourceAdapter } from '../adapters/base-adapter.js';
 import type { JobPosting, JobSource, JobCategory } from '../types/job.js';
-import { scoreJobSearchMatch } from '../core/job-search.js';
+import { rankAndDedupeJobs } from '../core/job-rank.js';
 
 export interface SearchJobsParams {
   keywords: string[];
@@ -116,18 +116,21 @@ export class JobsService {
     }
 
     const queryTime = Date.now() - startTime;
-    const limitedJobs = this.rankJobs(allJobs, params.keywords).slice(0, params.limit);
+    const limit = params.limit ?? 20;
+    const limitedJobs = rankAndDedupeJobs(allJobs, params.keywords, limit);
 
     return {
       total: limitedJobs.length,
       jobs: limitedJobs.map(job => ({
         id: job.id,
+        source: job.source,
         company_name: job.company_name,
         job_title: job.job_title,
         location: job.location,
         required_skills: job.required_skills,
         experience: job.experience_min !== null ? `${job.experience_min}${job.experience_max ? `~${job.experience_max}` : '+'}년` : '무관',
         url: job.url,
+        ...(job.also_on && job.also_on.length > 0 ? { also_on: job.also_on } : {}),
       })),
       sources_searched: sourcesSearched,
       search_meta: { query_time_ms: queryTime, cached: params.search_mode === 'local' },
@@ -145,17 +148,6 @@ export class JobsService {
     return Object.values(this.adapters)
       .filter(adapter => adapter.isAvailable())
       .map(adapter => adapter.source);
-  }
-
-  private rankJobs(jobs: JobPosting[], keywords: string[]): JobPosting[] {
-    return jobs
-      .map(job => ({ job, search: scoreJobSearchMatch(job, keywords) }))
-      .filter(item => keywords.length === 0 || item.search.matched)
-      .sort((left, right) => {
-        if (right.search.score !== left.search.score) return right.search.score - left.search.score;
-        return right.job.fetched_at.localeCompare(left.job.fetched_at);
-      })
-      .map(item => item.job);
   }
 
   async getJobDetail(params: GetJobDetailParams) {
