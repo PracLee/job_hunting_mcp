@@ -61,10 +61,11 @@ describe('tech-dictionary', () => {
       expect(score).toBeLessThan(100);
     });
 
-    it('일치 없으면 0점', () => {
+    it('의미적 관련이 전혀 없는 조합은 0점', () => {
+      // 온톨로지에 등록되지 않은 임의 스킬끼리 비교
       const score = skillMatchScore(
-        ['Python', 'Django'],
-        ['Java', 'Spring Boot'],
+        ['Excel', 'Photoshop'],
+        ['Unreal Engine'],
       );
       expect(score).toBe(0);
     });

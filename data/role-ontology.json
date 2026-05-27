@@ -1,0 +1,92 @@
+{
+  "$schema": "role-ontology/v1",
+  "description": "직무 위계 온톨로지 v1 — 노드(aliases 포함)와 isA/similarTo 관계. 직무명은 표기 변형이 심해 노드에 aliases를 내장한다.",
+  "nodes": [
+    { "id": "Engineer",            "type": "Role", "abstract": true,  "aliases": ["engineer", "엔지니어", "개발자", "developer"] },
+    { "id": "SoftwareEngineer",    "type": "Role", "abstract": true,  "aliases": [] },
+    { "id": "OpsEngineer",         "type": "Role", "abstract": true,  "aliases": [] },
+    { "id": "AIProfessional",      "type": "Role", "abstract": true,  "aliases": [] },
+
+    { "id": "BackendEngineer",     "type": "Role", "aliases": ["backend engineer", "backend developer", "백엔드 엔지니어", "백엔드 개발자", "백엔드", "backend"] },
+    { "id": "ServerEngineer",      "type": "Role", "aliases": ["server engineer", "server developer", "서버 엔지니어", "서버 개발자", "서버"] },
+    { "id": "APIEngineer",         "type": "Role", "aliases": ["api engineer", "api developer", "API 개발자"] },
+
+    { "id": "FrontendEngineer",    "type": "Role", "aliases": ["frontend engineer", "frontend developer", "프론트엔드 엔지니어", "프론트엔드 개발자", "프론트엔드", "frontend", "front-end"] },
+    { "id": "FullStackEngineer",   "type": "Role", "aliases": ["full stack engineer", "fullstack engineer", "full-stack engineer", "풀스택 엔지니어", "풀스택 개발자", "풀스택"] },
+
+    { "id": "MobileEngineer",      "type": "Role", "abstract": true, "aliases": ["mobile engineer", "mobile developer", "모바일 개발자", "모바일 엔지니어"] },
+    { "id": "AndroidEngineer",     "type": "Role", "aliases": ["android engineer", "android developer", "안드로이드 개발자", "안드로이드 엔지니어"] },
+    { "id": "iOSEngineer",         "type": "Role", "aliases": ["ios engineer", "ios developer", "iOS 개발자", "아이오에스 개발자"] },
+
+    { "id": "DevOpsEngineer",      "type": "Role", "aliases": ["devops engineer", "devops", "데브옵스", "데브옵스 엔지니어"] },
+    { "id": "SREEngineer",         "type": "Role", "aliases": ["sre", "site reliability engineer", "사이트 신뢰성 엔지니어"] },
+    { "id": "PlatformEngineer",    "type": "Role", "aliases": ["platform engineer", "플랫폼 엔지니어"] },
+    { "id": "InfraEngineer",       "type": "Role", "aliases": ["infrastructure engineer", "infra engineer", "인프라 엔지니어", "인프라 개발자"] },
+
+    { "id": "DataEngineer",        "type": "Role", "aliases": ["data engineer", "데이터 엔지니어"] },
+    { "id": "DataScientist",       "type": "Role", "aliases": ["data scientist", "데이터 사이언티스트", "데이터 분석가"] },
+
+    { "id": "MLEngineer",          "type": "Role", "aliases": ["ml engineer", "machine learning engineer", "머신러닝 엔지니어", "머신러닝 개발자", "ML 엔지니어"] },
+    { "id": "AIEngineer",          "type": "Role", "aliases": ["ai engineer", "AI 엔지니어", "AI 개발자", "인공지능 엔지니어", "인공지능 개발자"] },
+    { "id": "MLOpsEngineer",       "type": "Role", "aliases": ["mlops engineer", "mlops", "MLOps 엔지니어", "엠엘옵스"] },
+    { "id": "ResearchEngineer",    "type": "Role", "aliases": ["research engineer", "리서치 엔지니어", "research scientist", "AI 리서처", "ML 리서처"] },
+
+    { "id": "SecurityEngineer",    "type": "Role", "aliases": ["security engineer", "보안 엔지니어", "보안 개발자", "정보보안"] },
+    { "id": "QAEngineer",          "type": "Role", "aliases": ["qa engineer", "qa", "품질 엔지니어", "테스트 엔지니어", "test engineer"] }
+  ],
+  "edges": [
+    { "s": "SoftwareEngineer",  "p": "isA", "o": "Engineer" },
+    { "s": "OpsEngineer",       "p": "isA", "o": "Engineer" },
+    { "s": "AIProfessional",    "p": "isA", "o": "Engineer" },
+
+    { "s": "BackendEngineer",   "p": "isA", "o": "SoftwareEngineer" },
+    { "s": "ServerEngineer",    "p": "isA", "o": "SoftwareEngineer" },
+    { "s": "APIEngineer",       "p": "isA", "o": "SoftwareEngineer" },
+    { "s": "FrontendEngineer",  "p": "isA", "o": "SoftwareEngineer" },
+    { "s": "FullStackEngineer", "p": "isA", "o": "SoftwareEngineer" },
+    { "s": "MobileEngineer",    "p": "isA", "o": "SoftwareEngineer" },
+    { "s": "AndroidEngineer",   "p": "isA", "o": "MobileEngineer" },
+    { "s": "iOSEngineer",       "p": "isA", "o": "MobileEngineer" },
+
+    { "s": "DevOpsEngineer",    "p": "isA", "o": "OpsEngineer" },
+    { "s": "SREEngineer",       "p": "isA", "o": "OpsEngineer" },
+    { "s": "PlatformEngineer",  "p": "isA", "o": "OpsEngineer" },
+    { "s": "InfraEngineer",     "p": "isA", "o": "OpsEngineer" },
+
+    { "s": "DataEngineer",      "p": "isA", "o": "AIProfessional" },
+    { "s": "DataScientist",     "p": "isA", "o": "AIProfessional" },
+    { "s": "MLEngineer",        "p": "isA", "o": "AIProfessional" },
+    { "s": "AIEngineer",        "p": "isA", "o": "AIProfessional" },
+    { "s": "MLOpsEngineer",     "p": "isA", "o": "AIProfessional" },
+    { "s": "ResearchEngineer",  "p": "isA", "o": "AIProfessional" },
+
+    { "s": "SecurityEngineer",  "p": "isA", "o": "Engineer" },
+    { "s": "QAEngineer",        "p": "isA", "o": "Engineer" },
+
+    { "s": "BackendEngineer",   "p": "similarTo", "o": "ServerEngineer",     "weight": 0.95 },
+    { "s": "BackendEngineer",   "p": "similarTo", "o": "APIEngineer",        "weight": 0.85 },
+    { "s": "BackendEngineer",   "p": "similarTo", "o": "FullStackEngineer",  "weight": 0.6  },
+    { "s": "FrontendEngineer",  "p": "similarTo", "o": "FullStackEngineer",  "weight": 0.6  },
+
+    { "s": "DevOpsEngineer",    "p": "similarTo", "o": "SREEngineer",        "weight": 0.85 },
+    { "s": "DevOpsEngineer",    "p": "similarTo", "o": "PlatformEngineer",   "weight": 0.8  },
+    { "s": "DevOpsEngineer",    "p": "similarTo", "o": "InfraEngineer",      "weight": 0.8  },
+    { "s": "SREEngineer",       "p": "similarTo", "o": "PlatformEngineer",   "weight": 0.75 },
+    { "s": "SREEngineer",       "p": "similarTo", "o": "InfraEngineer",      "weight": 0.7  },
+    { "s": "DevOpsEngineer",    "p": "similarTo", "o": "BackendEngineer",    "weight": 0.4  },
+
+    { "s": "MLEngineer",        "p": "similarTo", "o": "AIEngineer",         "weight": 0.9  },
+    { "s": "MLEngineer",        "p": "similarTo", "o": "MLOpsEngineer",      "weight": 0.7  },
+    { "s": "MLEngineer",        "p": "similarTo", "o": "ResearchEngineer",   "weight": 0.7  },
+    { "s": "MLEngineer",        "p": "similarTo", "o": "DataScientist",      "weight": 0.65 },
+    { "s": "MLEngineer",        "p": "similarTo", "o": "DataEngineer",       "weight": 0.5  },
+    { "s": "AIEngineer",        "p": "similarTo", "o": "ResearchEngineer",   "weight": 0.7  },
+    { "s": "AIEngineer",        "p": "similarTo", "o": "MLOpsEngineer",      "weight": 0.6  },
+    { "s": "AIEngineer",        "p": "similarTo", "o": "DataScientist",      "weight": 0.6  },
+    { "s": "MLOpsEngineer",     "p": "similarTo", "o": "DevOpsEngineer",     "weight": 0.55 },
+    { "s": "DataEngineer",      "p": "similarTo", "o": "BackendEngineer",    "weight": 0.45 },
+    { "s": "DataScientist",     "p": "similarTo", "o": "ResearchEngineer",   "weight": 0.65 },
+
+    { "s": "AndroidEngineer",   "p": "similarTo", "o": "iOSEngineer",        "weight": 0.55 }
+  ]
+}

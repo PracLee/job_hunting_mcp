@@ -1,0 +1,86 @@
+{
+  "$schema": "skill-ontology/v1",
+  "description": "스킬 온톨로지 v1 — 노드(nodes)와 관계(edges)로 구성된 그래프. tech-dictionary.ts의 canonical 이름을 식별자로 사용.",
+  "nodes": [
+    { "id": "Python",        "type": "Language" },
+    { "id": "Java",          "type": "Language" },
+    { "id": "Kotlin",        "type": "Language" },
+    { "id": "JavaScript",    "type": "Language" },
+    { "id": "TypeScript",    "type": "Language" },
+    { "id": "Go",            "type": "Language" },
+
+    { "id": "WebFramework",  "type": "Concept", "abstract": true },
+    { "id": "ORM",           "type": "Concept", "abstract": true },
+    { "id": "AsyncRuntime",  "type": "Concept", "abstract": true },
+
+    { "id": "FastAPI",       "type": "Framework" },
+    { "id": "Django",        "type": "Framework" },
+    { "id": "Flask",         "type": "Framework" },
+    { "id": "Spring",        "type": "Framework" },
+    { "id": "Spring Boot",   "type": "Framework" },
+    { "id": "Express",       "type": "Framework" },
+    { "id": "NestJS",        "type": "Framework" },
+
+    { "id": "JPA",           "type": "Framework" },
+    { "id": "Hibernate",     "type": "Framework" },
+    { "id": "MyBatis",       "type": "Framework" },
+
+    { "id": "PyTorch",       "type": "Library" },
+    { "id": "TensorFlow",    "type": "Library" },
+    { "id": "LangChain",     "type": "Library" },
+    { "id": "Hugging Face",  "type": "Library" },
+
+    { "id": "LLM",           "type": "Paradigm" },
+    { "id": "RAG",           "type": "Paradigm" },
+    { "id": "MSA",           "type": "Paradigm" },
+    { "id": "REST API",      "type": "Paradigm" },
+    { "id": "GraphQL",       "type": "Paradigm" },
+
+    { "id": "AWS",           "type": "Platform" },
+    { "id": "GCP",           "type": "Platform" },
+    { "id": "Azure",         "type": "Platform" },
+    { "id": "Kubernetes",    "type": "Platform" },
+    { "id": "Docker",        "type": "Tool" }
+  ],
+  "edges": [
+    { "s": "FastAPI",     "p": "isA",          "o": "WebFramework" },
+    { "s": "Django",      "p": "isA",          "o": "WebFramework" },
+    { "s": "Flask",       "p": "isA",          "o": "WebFramework" },
+    { "s": "Spring Boot", "p": "isA",          "o": "WebFramework" },
+    { "s": "Express",     "p": "isA",          "o": "WebFramework" },
+    { "s": "NestJS",      "p": "isA",          "o": "WebFramework" },
+
+    { "s": "JPA",         "p": "isA",          "o": "ORM" },
+    { "s": "Hibernate",   "p": "isA",          "o": "ORM" },
+    { "s": "MyBatis",     "p": "isA",          "o": "ORM" },
+
+    { "s": "FastAPI",     "p": "implementedIn","o": "Python" },
+    { "s": "Django",      "p": "implementedIn","o": "Python" },
+    { "s": "Flask",       "p": "implementedIn","o": "Python" },
+    { "s": "PyTorch",     "p": "implementedIn","o": "Python" },
+    { "s": "TensorFlow",  "p": "implementedIn","o": "Python" },
+    { "s": "LangChain",   "p": "implementedIn","o": "Python" },
+    { "s": "Spring",      "p": "implementedIn","o": "Java" },
+    { "s": "Spring Boot", "p": "implementedIn","o": "Java" },
+    { "s": "Express",     "p": "implementedIn","o": "JavaScript" },
+    { "s": "NestJS",      "p": "implementedIn","o": "TypeScript" },
+
+    { "s": "Spring Boot", "p": "partOf",       "o": "Spring" },
+
+    { "s": "RAG",         "p": "requires",     "o": "LLM" },
+    { "s": "LangChain",   "p": "requires",     "o": "LLM" },
+
+    { "s": "FastAPI",     "p": "similarTo",    "o": "Django",      "weight": 0.7 },
+    { "s": "FastAPI",     "p": "similarTo",    "o": "Flask",       "weight": 0.8 },
+    { "s": "Django",      "p": "similarTo",    "o": "Flask",       "weight": 0.7 },
+    { "s": "Express",     "p": "similarTo",    "o": "NestJS",      "weight": 0.75 },
+    { "s": "Express",     "p": "similarTo",    "o": "Spring Boot", "weight": 0.5 },
+    { "s": "FastAPI",     "p": "similarTo",    "o": "Spring Boot", "weight": 0.5 },
+    { "s": "PyTorch",     "p": "similarTo",    "o": "TensorFlow",  "weight": 0.8 },
+    { "s": "MySQL",       "p": "similarTo",    "o": "PostgreSQL",  "weight": 0.8 },
+    { "s": "MySQL",       "p": "similarTo",    "o": "MariaDB",     "weight": 0.95 },
+    { "s": "AWS",         "p": "similarTo",    "o": "GCP",         "weight": 0.7 },
+    { "s": "AWS",         "p": "similarTo",    "o": "Azure",       "weight": 0.7 },
+    { "s": "GCP",         "p": "similarTo",    "o": "Azure",       "weight": 0.7 }
+  ]
+}

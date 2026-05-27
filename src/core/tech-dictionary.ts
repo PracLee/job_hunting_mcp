@@ -2,6 +2,7 @@
  * 기술 사전 — 기술스택 정규화 및 매칭에 사용
  * 동의어, 카테고리, 관련 기술 매핑
  */
+import { bestSemanticMatch } from './skill-ontology.js';
 
 export interface TechEntry {
   canonical: string;        // 정식 명칭
@@ -163,11 +164,12 @@ export function normalizeSkill(name: string): string {
   return aliasMap.get(name.toLowerCase()) || name;
 }
 
-/** 두 기술 목록의 매칭 점수 (0~100) */
+/** 두 기술 목록의 매칭 점수 (0~100). 정확 일치 + 온톨로지 부분 점수. */
 export function skillMatchScore(userSkills: string[], requiredSkills: string[], preferredSkills: string[] = []): number {
   if (requiredSkills.length === 0 && preferredSkills.length === 0) return 50;
 
-  const normalizedUser = new Set(userSkills.map(s => normalizeSkill(s)));
+  const normalizedUser = userSkills.map(s => normalizeSkill(s));
+  const userSet = new Set(normalizedUser);
 
   let score = 0;
   let total = 0;
@@ -176,8 +178,11 @@ export function skillMatchScore(userSkills: string[], requiredSkills: string[], 
   for (const skill of requiredSkills) {
     const norm = normalizeSkill(skill);
     total += 2;
-    if (normalizedUser.has(norm)) {
+    if (userSet.has(norm)) {
       score += 2;
+    } else {
+      // 정확 일치가 없을 때만 온톨로지 부분 점수 (0~2 사이, 보통 0.5~0.8 × 2)
+      score += 2 * bestSemanticMatch(normalizedUser, norm);
     }
   }
 
@@ -185,8 +190,10 @@ export function skillMatchScore(userSkills: string[], requiredSkills: string[], 
   for (const skill of preferredSkills) {
     const norm = normalizeSkill(skill);
     total += 1;
-    if (normalizedUser.has(norm)) {
+    if (userSet.has(norm)) {
       score += 1;
+    } else {
+      score += bestSemanticMatch(normalizedUser, norm);
     }
   }
 
